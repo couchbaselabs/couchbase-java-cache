@@ -26,9 +26,11 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import javax.cache.Cache;
 import javax.cache.CacheManager;
@@ -98,8 +100,20 @@ public class CouchbaseCacheManager implements CacheManager {
         if (isClosed()) {
             throw new IllegalStateException("CacheManager closed");
         }
+        if (cacheName == null) {
+            throw new NullPointerException("Cache name must not be null");
+        }
+        if (configuration == null) {
+            throw new NullPointerException("Configuration must not be null");
+        }
 
-        return null;
+        synchronized (caches) {
+            if (caches.containsKey(cacheName)) {
+                throw new IllegalArgumentException("Cache " + cacheName + " already exist");
+            } else {
+                return null; //TODO
+            }
+        }
     }
 
     @Override
@@ -107,7 +121,19 @@ public class CouchbaseCacheManager implements CacheManager {
         if (isClosed()) {
             throw new IllegalStateException("CacheManager closed");
         }
-        return null;
+        if (keyType == null || valueType == null) {
+            throw new NullPointerException("Key type and value type must be non-null");
+        }
+
+        synchronized (caches) {
+            Cache<?, ?> cache = caches.get(cacheName);
+            if (cache != null) {
+                //TODO verify that if the cache exist, its configuration conforms to the asked types (else ClassCastException)
+                return (Cache<K, V>) cache;
+            } else {
+                return null;
+            }
+        }
     }
 
     @Override
@@ -115,7 +141,16 @@ public class CouchbaseCacheManager implements CacheManager {
         if (isClosed()) {
             throw new IllegalStateException("CacheManager closed");
         }
-        return null;
+
+        synchronized (caches) {
+            Cache<?, ?> cache = caches.get(cacheName);
+            if (cache == null) {
+                return null;
+            } else {
+                //TODO verify that cache configuration has key and value types to Object else IllegalArgumentException
+                return (Cache<K, V>) cache;
+            }
+        }
     }
 
     @Override
@@ -123,13 +158,20 @@ public class CouchbaseCacheManager implements CacheManager {
         if (isClosed()) {
             throw new IllegalStateException("CacheManager closed");
         }
-        return Collections.unmodifiableSet(caches.keySet());
+
+        synchronized (caches) {
+            Set<String> currentNames = new HashSet<String>(caches.keySet());
+            return Collections.unmodifiableSet(currentNames);
+        }
     }
 
     @Override
     public synchronized void destroyCache(String cacheName) {
         if (isClosed()) {
             throw new IllegalStateException("CacheManager closed");
+        }
+        if (cacheName == null) {
+            throw new NullPointerException("cacheName must not be null");
         }
     }
 
@@ -138,12 +180,18 @@ public class CouchbaseCacheManager implements CacheManager {
         if (isClosed()) {
             throw new IllegalStateException("CacheManager closed");
         }
+        if (cacheName == null) {
+            throw new NullPointerException("cacheName must not be null");
+        }
     }
 
     @Override
     public void enableStatistics(String cacheName, boolean enabled) {
         if (isClosed()) {
             throw new IllegalStateException("CacheManager closed");
+        }
+        if (cacheName == null) {
+            throw new NullPointerException("cacheName must not be null");
         }
     }
 
