@@ -226,9 +226,9 @@ public class CouchbaseCacheManager implements CacheManager {
 
     @Override
     public <T> T unwrap(Class<T> clazz) {
-        if (clazz.isInstance(this)) {
-            return (T) this;
+        if (clazz.isAssignableFrom(this.getClass())) {
+            return clazz.cast(this);
         }
-        throw new IllegalArgumentException("Not of class " + clazz.getName());
+        throw new IllegalArgumentException("Cannot unwrap to " + clazz.getName());
     }
 }
