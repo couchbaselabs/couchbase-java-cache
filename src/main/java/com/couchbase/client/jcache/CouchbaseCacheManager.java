@@ -21,6 +21,7 @@
  */
 package com.couchbase.client.jcache;
 
+import java.lang.ref.WeakReference;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,11 +48,11 @@ public class CouchbaseCacheManager implements CacheManager {
 
     private final CouchbaseCachingProvider provider;
     private final URI uri;
-    private final ClassLoader classLoader;
+    private final WeakReference<ClassLoader> classLoader;
     private final Properties properties;
     private final Map<String, Cache> caches;
 
-    private boolean isClosed;
+    private volatile boolean isClosed;
 
     /**
      * Creates a new CouchbaseCacheManager.
@@ -65,7 +66,7 @@ public class CouchbaseCacheManager implements CacheManager {
                                  Properties properties) {
         this.provider = provider;
         this.uri = uri;
-        this.classLoader = classLoader;
+        this.classLoader = new WeakReference<ClassLoader>(classLoader);
         this.properties = properties;
         this.caches = new HashMap<String, Cache>();
         // this.isClosed defaults to false
@@ -83,7 +84,7 @@ public class CouchbaseCacheManager implements CacheManager {
 
     @Override
     public ClassLoader getClassLoader() {
-        return classLoader;
+        return classLoader.get();
     }
 
     @Override
