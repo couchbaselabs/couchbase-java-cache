@@ -44,6 +44,9 @@ import javax.cache.processor.EntryProcessorResult;
 import com.couchbase.client.core.logging.CouchbaseLogger;
 import com.couchbase.client.core.logging.CouchbaseLoggerFactory;
 import com.couchbase.client.java.Bucket;
+import com.couchbase.client.jcache.management.CouchbaseCacheMxBean;
+import com.couchbase.client.jcache.management.CouchbaseStatisticsMxBean;
+import com.couchbase.client.jcache.management.ManagementUtil;
 
 /**
  * The Couchbase implementation of a @{link Cache}.
@@ -62,6 +65,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     private final CouchbaseConfiguration<K, V> configuration;
     private final CacheLoader<K, V> cacheLoader;
     private final CacheWriter<K, V> cacheWriter;
+    private final CouchbaseCacheMxBean cacheMxBean;
+    private final CouchbaseStatisticsMxBean statisticsMxBean;
 
     private volatile boolean isClosed;
 
@@ -90,6 +95,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         this.expiryPolicy = this.configuration.getExpiryPolicyFactory().create();
 
         //TODO create management and statistics MXBeans here
+        this.cacheMxBean = new CouchbaseCacheMxBean(this);
+        this.statisticsMxBean = new CouchbaseStatisticsMxBean(this);
 
         this.isClosed = false;
 
@@ -112,7 +119,11 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
      * @param enabled the new status of statistics
      */
     private void setStatisticsEnabled(boolean enabled) {
-        //TODO : register/deregister the MXBean
+        if (enabled) {
+            ManagementUtil.registerStatistics(this, this.statisticsMxBean);
+        } else {
+            ManagementUtil.unregisterStatistics(this);
+        }
         this.configuration.setStatisticsEnabled(enabled);
     }
 
@@ -123,7 +134,11 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
      * @param enabled the enabled flag value
      */
     private void setManagementEnabled(boolean enabled) {
-        //TODO : register/deregister the MXBean
+        if (enabled) {
+            ManagementUtil.registerConfiguration(this, this.cacheMxBean);
+        } else {
+            ManagementUtil.unregisterConfiguration(this);
+        }
         this.configuration.setManagementEnabled(enabled);
     }
 
