@@ -32,9 +32,7 @@ import java.util.logging.Logger;
 import javax.cache.Cache;
 import javax.cache.CacheManager;
 import javax.cache.configuration.CacheEntryListenerConfiguration;
-import javax.cache.configuration.CompleteConfiguration;
 import javax.cache.configuration.Configuration;
-import javax.cache.configuration.MutableConfiguration;
 import javax.cache.expiry.ExpiryPolicy;
 import javax.cache.integration.CacheLoader;
 import javax.cache.integration.CacheWriter;
@@ -54,32 +52,29 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     private final CouchbaseCacheManager cacheManager;
     private final String name;
 
-    private ExpiryPolicy expiryPolicy;
-    private MutableConfiguration<K, V> configuration;
-    private CacheLoader<K, V> cacheLoader;
-    private CacheWriter<K, V> cacheWriter;
+    private final ExpiryPolicy expiryPolicy;
+    private final CouchbaseConfiguration<K, V> configuration;
+    private final CacheLoader<K, V> cacheLoader;
+    private final CacheWriter<K, V> cacheWriter;
 
     private volatile boolean isClosed;
 
-    /*package*/ <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, String name, ClassLoader classLoader, Configuration<K, V> conf) {
+    /*package*/ <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, String name,
+            CouchbaseConfiguration<K, V> conf) {
         this.cacheManager = cacheManager;
         this.name = name;
-        //TODO use classloader
         //make a local copy of the configuration for this cache
-        if (configuration instanceof CompleteConfiguration) {
-            this.configuration = new MutableConfiguration<K, V>((CompleteConfiguration<K, V>) conf);
-        } else {
-            this.configuration = new MutableConfiguration<K, V>();
-            this.configuration.setStoreByValue(false);
-            this.configuration.setTypes(conf.getKeyType(), conf.getValueType());
-            //TODO check other basic configuration elements
-        }
+        this.configuration = new CouchbaseConfiguration<K, V>(conf);
 
         if (this.configuration.getCacheLoaderFactory() != null) {
             this.cacheLoader = this.configuration.getCacheLoaderFactory().create();
+        } else {
+            this.cacheLoader = null;
         }
         if (this.configuration.getCacheWriterFactory() != null) {
             this.cacheWriter = (CacheWriter<K, V>) this.configuration.getCacheWriterFactory().create();
+        } else {
+            this.cacheWriter = null;
         }
 
         this.expiryPolicy = this.configuration.getExpiryPolicyFactory().create();

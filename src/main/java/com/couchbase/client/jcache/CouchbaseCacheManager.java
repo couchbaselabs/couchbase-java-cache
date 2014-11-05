@@ -94,6 +94,16 @@ public class CouchbaseCacheManager implements CacheManager {
         return properties;
     }
 
+    /**
+     * Create a new Cache programmatically. Note that this implementation requires
+     * a {@link CouchbaseConfiguration} as second parameter.
+     *
+     * @param cacheName the name of the new cache to be created
+     * @param configuration the {@link CouchbaseConfiguration} used to configure the cache
+     * @throws java.lang.IllegalArgumentException if the configuration is not of the expected type
+     * @see javax.cache.CacheManager#createCache(String, javax.cache.configuration.Configuration)
+     *
+     */
     @Override
     public <K, V, C extends Configuration<K, V>> Cache<K, V> createCache(String cacheName, C configuration)
             throws IllegalArgumentException {
@@ -106,12 +116,18 @@ public class CouchbaseCacheManager implements CacheManager {
         if (configuration == null) {
             throw new NullPointerException("Configuration must not be null");
         }
+        if (!(configuration instanceof CouchbaseConfiguration)) {
+            throw new IllegalArgumentException("Configuration must be of type "
+                    + CouchbaseConfiguration.class.getName());
+        }
+
+        CouchbaseConfiguration<K, V> couchbaseConfiguration = (CouchbaseConfiguration) configuration;
 
         synchronized (caches) {
             if (caches.containsKey(cacheName)) {
                 throw new IllegalArgumentException("Cache " + cacheName + " already exist");
             } else {
-                CouchbaseCache<K, V> cache = new CouchbaseCache<K, V>(this, cacheName, getClassLoader(), configuration);
+                CouchbaseCache<K, V> cache = new CouchbaseCache<K, V>(this, cacheName, couchbaseConfiguration);
                 caches.put(cacheName, cache);
                 return cache;
             }
