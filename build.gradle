@@ -1,7 +1,7 @@
 apply plugin: 'java'
 
 ext {
-    clientVersion = '2.0.0-SNAPSHOT'
+    clientVersion = '2.0.1'
     junitVersion = '4.11'
 }
 
@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    compile group: 'com.couchbase.client', name: 'couchbase-client', version: clientVersion, changing: true
+    compile group: 'com.couchbase.client', name: 'java-client', version: clientVersion, changing: true
     compile group: 'javax.cache', name: 'cache-api', version: '1.0.0'
 
     testCompile group: 'junit', name: 'junit', version: junitVersion
