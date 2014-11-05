@@ -37,6 +37,10 @@ import javax.cache.CacheManager;
 import javax.cache.configuration.Configuration;
 import javax.cache.spi.CachingProvider;
 
+import com.couchbase.client.core.logging.CouchbaseLogger;
+import com.couchbase.client.core.logging.CouchbaseLoggerFactory;
+import com.couchbase.client.java.Cluster;
+import com.couchbase.client.java.CouchbaseCluster;
 import com.couchbase.client.jcache.spi.CouchbaseCachingProvider;
 
 /**
@@ -48,6 +52,8 @@ import com.couchbase.client.jcache.spi.CouchbaseCachingProvider;
  */
 public class CouchbaseCacheManager implements CacheManager {
 
+    private static final CouchbaseLogger LOGGER = CouchbaseLoggerFactory.getInstance(CouchbaseCacheManager.class);
+
     private final CouchbaseCachingProvider provider;
     private final URI uri;
     private final WeakReference<ClassLoader> classLoader;
@@ -55,6 +61,8 @@ public class CouchbaseCacheManager implements CacheManager {
     private final Map<String, Cache> caches;
 
     private volatile boolean isClosed;
+
+    private final Cluster cluster;
 
     /**
      * Creates a new CouchbaseCacheManager.
@@ -72,6 +80,9 @@ public class CouchbaseCacheManager implements CacheManager {
         this.properties = properties;
         this.caches = new HashMap<String, Cache>();
         // this.isClosed defaults to false
+
+        //TODO find a way to pass the cluster and/or the ClusterEnvironment
+        this.cluster = CouchbaseCluster.create();
     }
 
     @Override
@@ -220,6 +231,17 @@ public class CouchbaseCacheManager implements CacheManager {
         }
 
         this.isClosed = true;
+
+        //close the cluster
+        try {
+            Boolean disconnected = this.cluster.disconnect();
+            if (!disconnected.booleanValue()) {
+                LOGGER.warn("Cluster disconnect failed (returned false)");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Cluster disconnect failed", e);
+        }
+
         //signal the provider that this cachemanager is no longer active so that
         // future requests for a similar cachemanager don't return this one.
         provider.signalCacheManagerClosed(this.getClassLoader(), this.getURI());
@@ -234,9 +256,7 @@ public class CouchbaseCacheManager implements CacheManager {
             try {
                 cache.close();
             } catch (Exception e) {
-                //TODO replace with logger
-                System.err.println("Error while closing the CacheManager");
-                e.printStackTrace();
+                LOGGER.error("Error while closing a managed Cache", e);
             }
         }
     }
@@ -266,5 +286,9 @@ public class CouchbaseCacheManager implements CacheManager {
             return clazz.cast(this);
         }
         throw new IllegalArgumentException("Cannot unwrap to " + clazz.getName());
+    }
+
+    /*package*/ Cluster getCluster() {
+        return cluster;
     }
 }

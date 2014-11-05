@@ -41,6 +41,10 @@ import javax.cache.processor.EntryProcessor;
 import javax.cache.processor.EntryProcessorException;
 import javax.cache.processor.EntryProcessorResult;
 
+import com.couchbase.client.core.logging.CouchbaseLogger;
+import com.couchbase.client.core.logging.CouchbaseLoggerFactory;
+import com.couchbase.client.java.Bucket;
+
 /**
  * The Couchbase implementation of a @{link Cache}.
  *
@@ -48,6 +52,8 @@ import javax.cache.processor.EntryProcessorResult;
  * @since 1.0
  */
 public class CouchbaseCache<K, V> implements Cache<K, V> {
+
+    private static final CouchbaseLogger LOGGER = CouchbaseLoggerFactory.getInstance(CouchbaseCache.class);
 
     private final CouchbaseCacheManager cacheManager;
     private final String name;
@@ -58,6 +64,9 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     private final CacheWriter<K, V> cacheWriter;
 
     private volatile boolean isClosed;
+
+    private final Bucket bucket;
+    private final String keyPrefix;
 
     /*package*/ <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, String name,
             CouchbaseConfiguration<K, V> conf) {
@@ -89,6 +98,10 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         if (configuration.isStatisticsEnabled()) {
             setStatisticsEnabled(true);
         }
+
+        this.keyPrefix = configuration.getCachePrefix();
+        this.bucket = cacheManager.getCluster().openBucket(configuration.getBucketName(),
+                configuration.getBucketPassword());
     }
 
     /**
@@ -332,7 +345,15 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             //signal the CacheManager that this cache is closed
             this.cacheManager.signalCacheClosed(getName());
 
-            //TODO close the cache internally
+            //close the corresponding bucket
+            try {
+                if (!this.bucket.close()) {
+                    LOGGER.warn("Could not close bucket for cache " + getName() + " (returned false)");
+                }
+            } catch (Exception e) {
+                LOGGER.error("Could not close bucket for cache " + getName(), e);
+            }
+            //TODO other cleanup operations needed to close the cache properly
         }
     }
 
