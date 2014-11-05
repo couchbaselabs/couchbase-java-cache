@@ -111,7 +111,9 @@ public class CouchbaseCacheManager implements CacheManager {
             if (caches.containsKey(cacheName)) {
                 throw new IllegalArgumentException("Cache " + cacheName + " already exist");
             } else {
-                return null; //TODO
+                CouchbaseCache<K, V> cache = new CouchbaseCache<K, V>(this, cacheName, getClassLoader(), configuration);
+                caches.put(cacheName, cache);
+                return cache;
             }
         }
     }
@@ -222,6 +224,20 @@ public class CouchbaseCacheManager implements CacheManager {
     @Override
     public boolean isClosed() {
         return this.isClosed;
+    }
+
+    /**
+     * Allows a cache to signal its manager it has been closed.
+     *
+     * @param cacheName the name of the closed cache
+     */
+    /*package*/ void signalCacheClosed(String cacheName) {
+        if (cacheName == null) {
+            return;
+        }
+        synchronized (caches) {
+            caches.remove(cacheName);
+        }
     }
 
     @Override

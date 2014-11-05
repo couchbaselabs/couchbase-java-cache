@@ -334,7 +334,10 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 }
             }
 
-            //TODO close the cache, ensure manager knows it is closed
+            //signal the CacheManager that this cache is closed
+            this.cacheManager.signalCacheClosed(getName());
+
+            //TODO close the cache internally
         }
     }
 
