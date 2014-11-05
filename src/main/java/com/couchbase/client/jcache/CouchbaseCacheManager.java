@@ -34,6 +34,7 @@ import java.util.Set;
 
 import javax.cache.Cache;
 import javax.cache.CacheManager;
+import javax.cache.configuration.CompleteConfiguration;
 import javax.cache.configuration.Configuration;
 import javax.cache.spi.CachingProvider;
 
@@ -131,8 +132,7 @@ public class CouchbaseCacheManager implements CacheManager {
             throw new IllegalArgumentException("Configuration must be of type "
                     + CouchbaseConfiguration.class.getName());
         }
-
-        CouchbaseConfiguration<K, V> couchbaseConfiguration = (CouchbaseConfiguration) configuration;
+        CouchbaseConfiguration<K, V> couchbaseConfiguration = (CouchbaseConfiguration<K, V>) configuration;
 
         synchronized (caches) {
             if (caches.containsKey(cacheName)) {
@@ -157,7 +157,19 @@ public class CouchbaseCacheManager implements CacheManager {
         synchronized (caches) {
             Cache<?, ?> cache = caches.get(cacheName);
             if (cache != null) {
-                //TODO verify that if the cache exist, its configuration conforms to the asked types (else ClassCastException)
+                //get the configuration
+                Configuration<?, ?> configuration = cache.getConfiguration(CompleteConfiguration.class);
+                //check the key type
+                Class<?> actualKeyType = configuration.getKeyType();
+                Class<?> actualValueType = configuration.getValueType();
+                if (actualKeyType == null || !actualKeyType.equals(keyType)) {
+                    throw new ClassCastException("Requested key type " + keyType.getName()
+                        + " incompatible with " + cacheName + "'s key type: " + actualKeyType);
+                }
+                if (actualValueType == null || !actualValueType.equals(valueType)) {
+                    throw new ClassCastException("Request value type " + valueType.getName()
+                        + " incompatible with " + cacheName + "'s value type: " + actualValueType);
+                }
                 return (Cache<K, V>) cache;
             } else {
                 return null;
@@ -176,8 +188,17 @@ public class CouchbaseCacheManager implements CacheManager {
             if (cache == null) {
                 return null;
             } else {
-                //TODO verify that cache configuration has key and value types to Object else IllegalArgumentException
-                return (Cache<K, V>) cache;
+                Configuration<?, ?> configuration = cache.getConfiguration(CompleteConfiguration.class);
+                Class<?> actualKeyType = configuration.getKeyType();
+                Class<?> actualValueType = configuration.getValueType();
+                if (actualKeyType.equals(Object.class)
+                        && actualValueType.equals(Object.class)) {
+                    //no runtime type checking
+                    return (Cache<K, V>) cache;
+                } else {
+                    throw new IllegalArgumentException("Cache " + cacheName + " was defined with runtime type checking"
+                        + " as a Cache<" + actualKeyType.getName() + ", " + actualValueType.getName() + ">");
+                }
             }
         }
     }
@@ -235,7 +256,7 @@ public class CouchbaseCacheManager implements CacheManager {
         //close the cluster
         try {
             Boolean disconnected = this.cluster.disconnect();
-            if (!disconnected.booleanValue()) {
+            if (!disconnected) {
                 LOGGER.warn("Cluster disconnect failed (returned false)");
             }
         } catch (Exception e) {
@@ -248,7 +269,7 @@ public class CouchbaseCacheManager implements CacheManager {
 
         List<Cache> cachesToClose;
         synchronized (caches) {
-            cachesToClose = new ArrayList(caches.values());
+            cachesToClose = new ArrayList<Cache>(caches.values());
             caches.clear();
         }
 
