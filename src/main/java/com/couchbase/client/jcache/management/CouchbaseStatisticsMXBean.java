@@ -171,5 +171,105 @@ public class CouchbaseStatisticsMxBean implements CacheStatisticsMXBean, Seriali
         return (cacheRemoveTimeTakenNanos.longValue() / getCacheGets()) / TimeUnit.MICROSECONDS.toNanos(1L);
     }
 
-    //TODO methods to increment counters
+    //* METHODS TO INCREMENT COUNTERS */
+
+    /**
+     * Increase the cache removals by the number specified.
+     *
+     * @param number the number to increase the counter by
+     */
+    public void increaseCacheRemovals(long number) {
+        cacheRemovals.getAndAdd(number);
+    }
+
+    /**
+     * Increase the expiries by the number specified.
+     *
+     * @param number the number to increase the counter by
+     */
+    public void increaseCacheExpiries(long number) {
+        cacheExpiries.getAndAdd(number);
+    }
+
+    /**
+     * Increase the cache puts by the number specified.
+     *
+     * @param number the number to increase the counter by
+     */
+    public void increaseCachePuts(long number) {
+        cachePuts.getAndAdd(number);
+    }
+
+    /**
+     * Increase the cache hits by the number specified.
+     *
+     * @param number the number to increase the counter by
+     */
+    public void increaseCacheHits(long number) {
+        cacheHits.getAndAdd(number);
+    }
+
+    /**
+     * Increase the cache misses by the number specified.
+     *
+     * @param number the number to increase the counter by
+     */
+    public void increaseCacheMisses(long number) {
+        cacheMisses.getAndAdd(number);
+    }
+
+    /**
+     * Increase the cache evictions by the number specified.
+     *
+     * @param number the number to increase the counter by
+     */
+    public void increaseCacheEvictions(long number) {
+        cacheEvictions.getAndAdd(number);
+    }
+
+    /**
+     * Increment the get time accumulator.
+     *
+     * @param duration the time taken in nanoseconds
+     */
+    public void addGetTimeNano(long duration) {
+        if (cacheGetTimeTakenNanos.get() <= Long.MAX_VALUE - duration) {
+            cacheGetTimeTakenNanos.addAndGet(duration);
+        } else {
+            //counter full. Just reset.
+            clear();
+            cacheGetTimeTakenNanos.set(duration);
+        }
+    }
+
+
+    /**
+     * Increment the put time accumulator.
+     *
+     * @param duration the time taken in nanoseconds
+     */
+    public void addPutTimeNano(long duration) {
+        if (cachePutTimeTakenNanos.get() <= Long.MAX_VALUE - duration) {
+            cachePutTimeTakenNanos.addAndGet(duration);
+        } else {
+            //counter full. Just reset.
+            clear();
+            cachePutTimeTakenNanos.set(duration);
+        }
+    }
+
+    /**
+     * Increment the remove time accumulator.
+     *
+     * @param duration the time taken in nanoseconds
+     */
+    public void addRemoveTimeNano(long duration) {
+        if (cacheRemoveTimeTakenNanos.get() <= Long.MAX_VALUE - duration) {
+            cacheRemoveTimeTakenNanos.addAndGet(duration);
+        } else {
+            //counter full. Just reset.
+            clear();
+            cacheRemoveTimeTakenNanos.set(duration);
+        }
+    }
 }
