@@ -94,7 +94,6 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
         this.expiryPolicy = this.configuration.getExpiryPolicyFactory().create();
 
-        //TODO create management and statistics MXBeans here
         this.cacheMxBean = new CouchbaseCacheMxBean(this);
         this.statisticsMxBean = new CouchbaseStatisticsMxBean(this);
 
