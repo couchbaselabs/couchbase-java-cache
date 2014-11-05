@@ -1,4 +1,5 @@
 apply plugin: 'java'
+apply plugin: 'checkstyle'
 
 ext {
     clientVersion = '2.0.1'
@@ -16,6 +17,11 @@ dependencies {
     compile group: 'javax.cache', name: 'cache-api', version: '1.0.0'
 
     testCompile group: 'junit', name: 'junit', version: junitVersion
+}
+
+checkstyle {
+    configFile = new File(rootDir, "checkstyle.xml")
+    toolVersion = "6.0"
 }
 
 tasks.withType(JavaCompile) {

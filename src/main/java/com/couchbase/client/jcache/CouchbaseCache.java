@@ -68,7 +68,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     private final Bucket bucket;
     private final String keyPrefix;
 
-    /*package*/ <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, String name,
+    /* package scope*/
+    <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, String name,
             CouchbaseConfiguration<K, V> conf) {
         this.cacheManager = cacheManager;
         this.name = name;
@@ -119,7 +120,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
      * Allows to enable/disable managemnet via JMX.
      * This will also update the configuration.
      *
-     * @param enabled
+     * @param enabled the enabled flag value
      */
     private void setManagementEnabled(boolean enabled) {
         //TODO : register/deregister the MXBean
@@ -363,7 +364,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     }
 
     /**
-     * Convenience method to check status of the cache and throw appropriate exception if it is closed
+     * Convenience method to check status of the cache and throw appropriate exception if it is closed.
      */
     private void checkOpen() {
         if (isClosed()) {

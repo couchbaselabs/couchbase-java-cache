@@ -74,14 +74,15 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     }
 
     /**
-     * @return the name of the bucket in which the cached data will be stored
+     * Returns the name of the bucket in which the cached data will be stored.
      */
     public String getBucketName() {
         return bucketName;
     }
 
     /**
-     * @return the password for the bucket
+     * Returns  the password for the bucket.
+     *
      * @see #getBucketName()
      */
     public String getBucketPassword() {
@@ -99,7 +100,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     }
 
     /**
-     * Builder for creating {@link CouchbaseConfiguration CouchbaseConfigurations}
+     * Builder for creating {@link CouchbaseConfiguration CouchbaseConfigurations}.
      */
     public static final class Builder<K, V> {
 
@@ -186,7 +187,8 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         }
 
         /**
-         * Create the appropriate {@link CouchbaseConfiguration} from this {@link Builder}
+         * Create the appropriate {@link CouchbaseConfiguration} from this {@link Builder}.
+         *
          * @return the built CouchbaseConfiguration
          */
         public CouchbaseConfiguration<K, V> build() {

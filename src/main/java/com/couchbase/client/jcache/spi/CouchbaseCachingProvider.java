@@ -162,8 +162,8 @@ public class CouchbaseCachingProvider implements CachingProvider {
      *
      * This method does not close the CacheManager.
      *
-     * @param classLoader
-     * @param uri
+     * @param classLoader the classLoader identifying the closed manager
+     * @param uri the uri identifying the closed manager
      */
     public synchronized void signalCacheManagerClosed(ClassLoader classLoader, URI uri) {
         URI managerUri = (uri == null) ? getDefaultURI() : uri;
