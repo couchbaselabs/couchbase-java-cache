@@ -204,6 +204,10 @@ public class CouchbaseCacheManager implements CacheManager {
         }
 
         this.isClosed = true;
+        //signal the provider that this cachemanager is no longer active so that
+        // future requests for a similar cachemanager don't return this one.
+        provider.signalCacheManagerClosed(this.getClassLoader(), this.getURI());
+
         List<Cache> cachesToClose;
         synchronized (caches) {
             cachesToClose = new ArrayList(caches.values());

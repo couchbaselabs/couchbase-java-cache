@@ -153,4 +153,30 @@ public class CouchbaseCachingProvider implements CachingProvider {
                 return false;
         }
     }
+
+    /**
+     * This method allows to signal the {@link CachingProvider} that a {@link CacheManager}
+     * identified by a given URI and ClassLoader has been closed externally. The manager
+     * should no longer be tracked by this provider if it was (otherwise this method does
+     * nothing).
+     *
+     * This method does not close the CacheManager.
+     *
+     * @param classLoader
+     * @param uri
+     */
+    public synchronized void signalCacheManagerClosed(ClassLoader classLoader, URI uri) {
+        URI managerUri = (uri == null) ? getDefaultURI() : uri;
+        ClassLoader managerClassLoader = (classLoader == null) ? getDefaultClassLoader() : classLoader;
+
+        Map<URI, CacheManager> managers = managersByClassLoader.get(managerClassLoader);
+        if (managers != null) {
+            managers.remove(managerUri);
+
+            if (managers.isEmpty()) {
+                managersByClassLoader.remove(managerClassLoader);
+            }
+        }
+
+    }
 }
