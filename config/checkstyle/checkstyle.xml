@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!DOCTYPE module PUBLIC
-  "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
-  "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+    "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
+    "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
 
 <!--
     This Checkstyle configuration is based on Checkstyle Google Java Style
@@ -12,6 +12,10 @@
     - package statement can have the licence without an empty line separator (see EmptyLineSeparator)
     - no paragraph tag is enforced in javadocs (no JavaDocParagraph)
     - different import order (see CustomImportOrder)
+    - changed parameter regex to allow for "aVariable" style
+    - added check for constans in FOO_BAR notation
+    - added checks for class and interface docblocks
+    - changed ordering for imports to match intellij defaults
 
     Source is a Checkstyle configuration that checks the Google coding conventions from:
 
@@ -112,25 +116,30 @@
       <message key="name.invalidPattern"
                value="Type name ''{0}'' must match pattern ''{1}''."/>
     </module>
+    <module name="ConstantName">
+      <property name="format" value="^[A-Z0-9_]*$"/>
+      <message key="name.invalidPattern"
+               value="Member name ''{0}'' must match pattern ''{1}''."/>
+    </module>
     <module name="MemberName">
-      <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9]*$"/>
+      <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
       <message key="name.invalidPattern"
                value="Member name ''{0}'' must match pattern ''{1}''."/>
     </module>
     <module name="ParameterName">
-      <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9]*$"/>
+      <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
       <message key="name.invalidPattern"
                value="Parameter name ''{0}'' must match pattern ''{1}''."/>
     </module>
     <module name="LocalVariableName">
       <property name="tokens" value="VARIABLE_DEF"/>
-      <property name="format" value="^[a-z][a-z0-9][a-zA-Z0-9]*$"/>
+      <property name="format" value="^[a-z][a-zA-Z0-9]*$"/>
       <property name="allowOneCharVarInForLoop" value="true"/>
       <message key="name.invalidPattern"
                value="Local variable name ''{0}'' must match pattern ''{1}''."/>
     </module>
     <module name="ClassTypeParameterName">
-      <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)"/>
+      <property name="format" value="(^[A-Z0-9]+$)"/>
       <message key="name.invalidPattern"
                value="Class type name ''{0}'' must match pattern ''{1}''."/>
     </module>
@@ -152,19 +161,19 @@
     </module>
     <module name="Indentation">
       <property name="basicOffset" value="4"/>
-      <property name="lineWrappingIndentation" value="8"/>
+      <property name="lineWrappingIndentation" value="4"/>
     </module>
     <module name="AbbreviationAsWordInName">
       <property name="ignoreFinal" value="false"/>
-      <property name="allowedAbbreviationLength" value="1"/>
+      <property name="allowedAbbreviationLength" value="3"/>
     </module>
     <module name="OverloadMethodsDeclarationOrder"/>
     <module name="VariableDeclarationUsageDistance"/>
     <module name="CustomImportOrder">
       <property name="thirdPartyPackageRegExp" value=".*"/>
       <property name="standardPackageRegExp" value="^java|javax"/>
-      <property name="sortImportsInGroupAlphabetically" value="true"/>
-      <property name="customImportOrderRules" value="STATIC###STANDARD_JAVA_PACKAGE###SPECIAL_IMPORTS###THIRD_PARTY_PACKAGE###SAME_PACKAGE(2)"/>
+      <!--<property name="sortImportsInGroupAlphabetically" value="true"/>-->
+      <property name="customImportOrderRules" value="THIRD_PARTY_PACKAGE###STANDARD_JAVA_PACKAGE###STATIC"/>
     </module>
     <module name="MethodParamPad"/>
     <module name="OperatorWrap">
@@ -186,6 +195,10 @@
     <module name="AtclauseOrder">
       <property name="tagOrder" value="@param, @return, @throws, @deprecated"/>
       <property name="target" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF, VARIABLE_DEF"/>
+    </module>
+    <module name="JavadocType">
+      <property name="authorFormat" value="^[A-Za-z\s]+$" />
+      <property name="allowUnknownTags" value="true" />
     </module>
     <module name="JavadocMethod">
       <property name="scope" value="public"/>
