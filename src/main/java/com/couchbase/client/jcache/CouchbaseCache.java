@@ -24,6 +24,7 @@ package com.couchbase.client.jcache;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
@@ -203,15 +204,33 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public Map<K, V> getAll(Set<? extends K> keys) {
         checkOpen();
+        Map<K, V> result = new HashMap<K, V>(keys.size());
+        for (K key : keys) {
+            //TODO optimize for bulk loads?
+            V value = get(key);
+            if (value != null) {
+                result.put(key, value);
+            }
+        }
 
-        return null;
+        return result;
     }
 
+    /**
+     * {@inheritDocs}
+     *
+     * Note that this implementation attempts a load of the document from couchbase.
+     * It is more efficient to directly attempt to retrieve the value with get than call containsKey then get in this
+     * cache implementation, unless you don't want to trigger statistics and/or read-through (if activated).
+     *
+     * @param key the key to check for
+     * @return true if key is present in cache, false otherwise
+     */
     @Override
     public boolean containsKey(K key) {
         checkOpen();
 
-        return false;
+        return bucket.get(String.valueOf(key)) != null;
     }
 
     @Override
