@@ -111,6 +111,13 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 configuration.getBucketPassword());
     }
 
+    protected String toStringKey(K key) {
+        if (key == null) {
+            throw new NullPointerException("Keys must not be null");
+        }
+        return keyPrefix + String.valueOf(key);
+    }
+
     /**
      * Allows to enable/disable statistics via JMX.
      * This will also update the configuration.
