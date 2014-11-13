@@ -171,8 +171,33 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public V get(K key) {
         checkOpen();
+        long start = (isStatisticsEnabled()) ? System.nanoTime() : 0;
+        String cbKey = toInternalKey(key);
+        V result = null;
 
-        return null;
+        SerializableDocument doc = bucket.get(cbKey, SerializableDocument.class);
+        if(doc != null) {
+            if (isStatisticsEnabled()) {
+                statisticsMxBean.increaseCacheHits(1L);
+            }
+            touchIfNeeded(cbKey);
+            result = (V) doc.content();
+        } else {
+            if (isStatisticsEnabled()) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            }
+            if (cacheLoader != null && configuration.isReadThrough()) {
+                V loaded = cacheLoader.load(key);
+                if (loaded != null && (doc = createDocument(key, loaded, Operation.CREATION)) != null) {
+                    bucket.insert(doc);
+                    result = loaded;
+                }
+            }
+        }
+        if (isStatisticsEnabled()) {
+            statisticsMxBean.addGetTimeNano(System.nanoTime() - start);
+        }
+        return result;
     }
 
     @Override
