@@ -127,6 +127,15 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     }
 
     /**
+     * Checks the status of statistics.
+     *
+     * @return true if statistics are enabled in configuration, false otherwise
+     */
+    private boolean isStatisticsEnabled() {
+        return configuration.isStatisticsEnabled();
+    }
+
+    /**
      * Allows to enable/disable managemnet via JMX.
      * This will also update the configuration.
      *
@@ -139,6 +148,15 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             ManagementUtil.unregisterConfiguration(this);
         }
         this.configuration.setManagementEnabled(enabled);
+    }
+
+    /**
+     * Checks the status of management.
+     *
+     * @return true if management is enabled in configuration, false otherwise
+     */
+    private boolean isManagementEnabled() {
+        return configuration.isManagementEnabled();
     }
 
     @Override
