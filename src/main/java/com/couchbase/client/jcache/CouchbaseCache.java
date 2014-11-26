@@ -286,8 +286,9 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public void putAll(Map<? extends K, ? extends V> map) {
         checkOpen();
-
-
+        for (Map.Entry<? extends K, ? extends V> entry : map.entrySet()) {
+            put(entry.getKey(), entry.getValue());
+        }
     }
 
     @Override
@@ -300,8 +301,17 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public boolean remove(K key) {
         checkOpen();
-
-        return false;
+        String internalKey = toInternalKey(key);
+        SerializableDocument oldDoc = bucket.getAndLock(internalKey, 10, SerializableDocument.class);
+        if (oldDoc == null) {
+            return false;
+        } else {
+            bucket.remove(oldDoc);
+            if (isStatisticsEnabled()) {
+                statisticsMxBean.increaseCacheRemovals(1L);
+            }
+            return true;
+        }
     }
 
     @Override
