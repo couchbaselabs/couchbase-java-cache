@@ -277,7 +277,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             return null;
         } else {
             if (configuration.isStatisticsEnabled()) {
-                statisticsMxBean.increaseCacheMisses(1L);
+                statisticsMxBean.increaseCacheHits(1L);
             }
             return (V) oldValue.content();
         }
