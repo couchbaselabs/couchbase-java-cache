@@ -294,8 +294,35 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public boolean putIfAbsent(K key, V value) {
         checkOpen();
+        checkTypes(key, value);
+        String internalKey = toInternalKey(key);
 
-        return false;
+        SerializableDocument oldDoc = bucket.get(internalKey, SerializableDocument.class);
+        if (oldDoc != null) {
+            if (isStatisticsEnabled()) {
+                statisticsMxBean.increaseCacheHits(1L);
+            }
+            return false;
+        } else {
+            //TODO the key should be locked here and other instances of the cache should not be able to insert it
+            if (isStatisticsEnabled()) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            }
+            try {
+                SerializableDocument newDoc = createDocument(key, value, Operation.CREATION, oldDoc.cas());
+                if (newDoc != null) {
+                    bucket.insert(newDoc);
+                    if (isStatisticsEnabled()) {
+                        statisticsMxBean.increaseCachePuts(1L);
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
+            } catch (Exception e) {
+                throw new CacheException("Error during putIfAbsent of " + key);
+            }
+        }
     }
 
     @Override
@@ -537,7 +564,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     }
 
     /**
-     * Depending on the operation, produces a SerializableDocument with correct TTL.
+     * Depending on the operation, produces a SerializableDocument with correct TTL and a CAS of 0.
      *
      * @param key the key for the document
      * @param value the value to store
@@ -547,21 +574,36 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
      * @throws IllegalArgumentException when the {@link ExpiryPolicy} produces a TTL > 30 days
      */
     private SerializableDocument createDocument(K key, V value, Operation op) {
+        return createDocument(key, value, op, 0L);
+    }
+
+    /**
+     * Depending on the operation, produces a SerializableDocument with correct TTL and CAS.
+     *
+     * @param key the key for the document
+     * @param value the value to store
+     * @param op the operation being performed
+     * @param cas the cas of the document (or 0 if none needed)
+     * @return the {@link SerializableDocument} to be persisted, or null if the {@link ExpiryPolicy}
+     *  indicates a TTL already expired
+     * @throws IllegalArgumentException when the {@link ExpiryPolicy} produces a TTL > 30 days
+     */
+    private SerializableDocument createDocument(K key, V value, Operation op, long cas) {
         String cbKey = toInternalKey(key);
         Serializable cbValue = toInternalValue(value);
         int ttlOrCode = getDurationCode(op);
         switch (ttlOrCode) {
             case TTL_DONT_CHANGE:
-                return SerializableDocument.create(cbKey, cbValue);
+                return SerializableDocument.create(cbKey, cbValue, cas);
             case TTL_NONE:
-                return SerializableDocument.create(cbKey, cbValue);
+                return SerializableDocument.create(cbKey, cbValue, cas);
             case TTL_EXPIRED:
                 return null;
             default:
                 if (ttlOrCode < 0) {
                     throw new IllegalArgumentException("Unknown ttl code " + ttlOrCode);
                 } else {
-                    return SerializableDocument.create(cbKey, ttlOrCode, cbValue);
+                    return SerializableDocument.create(cbKey, ttlOrCode, cbValue, cas);
                 }
         }
     }
