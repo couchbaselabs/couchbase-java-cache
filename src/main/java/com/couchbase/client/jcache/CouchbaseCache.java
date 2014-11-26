@@ -32,6 +32,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.cache.Cache;
+import javax.cache.CacheException;
 import javax.cache.CacheManager;
 import javax.cache.configuration.CacheEntryListenerConfiguration;
 import javax.cache.configuration.Configuration;
@@ -242,15 +243,44 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public void put(K key, V value) {
         checkOpen();
+        checkTypes(key, value);
 
+        try {
+            SerializableDocument doc = createDocument(key, value, Operation.CREATION);
+            //Only do something if doc is not null (otherwise it means expiry was already set)
+            if (doc != null) {
+                bucket.upsert(doc);
+                if (configuration.isStatisticsEnabled()) {
+                    statisticsMxBean.increaseCachePuts(1L);
+                }
+            }
+        } catch (Exception e) {
+            throw new CacheException("Error during put of " + key, e);
+        }
 
     }
 
     @Override
     public V getAndPut(K key, V value) {
         checkOpen();
+        checkTypes(key, value);
 
-        return null;
+        String internalKey = toInternalKey(key);
+        SerializableDocument oldValue = bucket.get(internalKey, SerializableDocument.class);
+
+        put(key, value);
+
+        if (oldValue == null) {
+            if (configuration.isStatisticsEnabled()) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            }
+            return null;
+        } else {
+            if (configuration.isStatisticsEnabled()) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            }
+            return (V) oldValue.content();
+        }
     }
 
     @Override
@@ -502,9 +532,9 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
      * @param key the key for the document
      * @param value the value to store
      * @param op the operation being performed
-     * @return the {@link SerializableDocument} to be persisted
+     * @return the {@link SerializableDocument} to be persisted, or null if the {@link ExpiryPolicy}
+     *  indicates a TTL already expired
      * @throws IllegalArgumentException when the {@link ExpiryPolicy} produces a TTL > 30 days
-     * @throws IllegalStateException when the {@link ExpiryPolicy} indicates a TTL already expired
      */
     private SerializableDocument createDocument(K key, V value, Operation op) {
         String cbKey = toInternalKey(key);
@@ -516,7 +546,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             case TTL_NONE:
                 return SerializableDocument.create(cbKey, cbValue);
             case TTL_EXPIRED:
-                throw new IllegalStateException("Policy indicates expiration for " + op.name());
+                return null;
             default:
                 if (ttlOrCode < 0) {
                     throw new IllegalArgumentException("Unknown ttl code " + ttlOrCode);
@@ -539,6 +569,22 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         } else {
             throw new ClassCastException("This cache can only accept Serializable values");
         }
+    }
+
+    private void checkTypes(K key, V value) {
+        Class keyType = key.getClass();
+        Class valueType = value.getClass();
+
+        Class confKeyType = configuration.getKeyType();
+        Class confValueType = configuration.getValueType();
+
+        if (confKeyType != Object.class && !confKeyType.isAssignableFrom(keyType)) {
+            throw new ClassCastException("Keys are required to be of type " + confKeyType.getName());
+        }
+        if (confValueType != Object.class && !confValueType.isAssignableFrom(valueType)) {
+            throw new ClassCastException("Values are required to be of type " + confValueType.getName());
+        }
+
     }
 
     private static enum Operation {
