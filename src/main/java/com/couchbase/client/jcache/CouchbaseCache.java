@@ -36,6 +36,7 @@ import javax.cache.CacheException;
 import javax.cache.CacheManager;
 import javax.cache.configuration.CacheEntryListenerConfiguration;
 import javax.cache.configuration.Configuration;
+import javax.cache.event.CacheEntryRemovedListener;
 import javax.cache.expiry.Duration;
 import javax.cache.expiry.ExpiryPolicy;
 import javax.cache.integration.CacheLoader;
@@ -328,6 +329,9 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public boolean remove(K key) {
         checkOpen();
+        if (key == null) {
+            throw new NullPointerException("Removed key cannot be null");
+        }
         String internalKey = toInternalKey(key);
         SerializableDocument oldDoc = bucket.getAndLock(internalKey, 10, SerializableDocument.class);
         if (oldDoc == null) {
@@ -378,16 +382,20 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public void removeAll(Set<? extends K> keys) {
+        if (keys == null) {
+            throw new NullPointerException("Set of keys cannot be null");
+        }
         checkOpen();
-
-
+        for (K key : keys) {
+            remove(key);
+        }
     }
 
     @Override
     public void removeAll() {
         checkOpen();
-
-
+        clear();
+        //TODO a sane way to notify listeners here?
     }
 
     @Override
@@ -453,7 +461,11 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public void clear() {
         checkOpen();
-
+        try {
+            bucket.bucketManager().flush();
+        } catch (Exception e) {
+            throw new CacheException("Unable to clear", e);
+        }
     }
 
     @Override
