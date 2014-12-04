@@ -528,18 +528,6 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         }
     }
 
-    private void internalClear(Action1<? super SerializableDocument> action) {
-        getAllKeys()
-                .flatMap(new Func1<String, Observable<SerializableDocument>>() {
-                    @Override
-                    public Observable<SerializableDocument> call(String id) {
-                        return bucket.async().remove(id, SerializableDocument.class);
-                    }
-                })
-                .toBlocking()
-                .forEach(action);
-    }
-
     @Override
     public synchronized void close() {
         if (!isClosed) {
@@ -606,6 +594,32 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         if (isClosed()) {
             throw new IllegalStateException("Cache " + name + " closed");
         }
+    }
+
+    private V internalGet(String cbKey) {
+        SerializableDocument doc = bucket.get(cbKey, SerializableDocument.class);
+        if (doc == null) {
+            return null;
+        }
+        return (V) doc.content();
+    }
+
+    private void internalPut(String cbKey, V value) {
+        SerializableDocument doc = SerializableDocument.create(cbKey, toInternalValue(value));
+        bucket.upsert(doc);
+    }
+
+
+    private void internalClear(Action1<? super SerializableDocument> action) {
+        getAllKeys()
+                .flatMap(new Func1<String, Observable<SerializableDocument>>() {
+                    @Override
+                    public Observable<SerializableDocument> call(String id) {
+                        return bucket.async().remove(id, SerializableDocument.class);
+                    }
+                })
+                .toBlocking()
+                .forEach(action);
     }
 
     private int getDurationCode(Operation op) {
