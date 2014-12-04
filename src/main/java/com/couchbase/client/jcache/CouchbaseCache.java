@@ -239,6 +239,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public void loadAll(Set<? extends K> keys, boolean replaceExistingValues, CompletionListener completionListener) {
         checkOpen();
 
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -349,35 +350,35 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public boolean remove(K key, V oldValue) {
         checkOpen();
 
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public V getAndRemove(K key) {
         checkOpen();
 
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean replace(K key, V oldValue, V newValue) {
         checkOpen();
 
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean replace(K key, V value) {
         checkOpen();
 
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public V getAndReplace(K key, V value) {
         checkOpen();
 
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -407,7 +408,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             Object... arguments) throws EntryProcessorException {
         checkOpen();
 
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -415,17 +416,17 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             Object... arguments) {
         checkOpen();
 
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void registerCacheEntryListener(CacheEntryListenerConfiguration<K, V> cacheEntryListenerConfiguration) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void deregisterCacheEntryListener(CacheEntryListenerConfiguration<K, V> cacheEntryListenerConfiguration) {
-
+        throw new UnsupportedOperationException();
     }
 
     @Override
