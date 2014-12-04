@@ -50,6 +50,8 @@ import com.couchbase.client.jcache.management.CouchbaseCacheMxBean;
 import com.couchbase.client.jcache.management.CouchbaseStatisticsMxBean;
 import com.couchbase.client.jcache.management.ManagementUtil;
 import rx.Observable;
+import rx.functions.Action1;
+import rx.functions.Actions;
 import rx.functions.Func1;
 
 /**
@@ -392,8 +394,12 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public void removeAll() {
         checkOpen();
-        clear();
-        //TODO a sane way to notify listeners here?
+        internalClear(new Action1<SerializableDocument>() {
+                    @Override
+                    public void call(SerializableDocument serializableDocument) {
+                        //TODO notify CacheEntryRemovedListeners here
+                    }
+                });
     }
 
     @Override
@@ -426,13 +432,21 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public Iterator<Entry<K, V>> iterator() {
         checkOpen();
 
-        return getAllDocuments()
+        return getAllKeys()
+                .flatMap(new Func1<String, Observable<SerializableDocument>>() {
+                    @Override
+                    public Observable<SerializableDocument> call(String id) {
+                        return bucket.async().get(id, SerializableDocument.class);
+                    }
+                })
                 .map(new Func1<SerializableDocument, Entry<K, V>>() {
                     @Override
                     public Entry<K, V> call(SerializableDocument serializableDocument) {
                         return new CouchbaseCacheEntry(serializableDocument.id(), serializableDocument.content());
                     }
-                }).toBlocking().getIterator();
+                })
+                .toBlocking()
+                .getIterator();
     }
 
     private String[] checkAndGetViewInfo() {
@@ -458,20 +472,21 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 + " for cache " + getName() + ",did you create it?", cause);
     }
 
-    private Observable<SerializableDocument> getAllDocuments() {
+    private Observable<String> getAllKeys() {
         String[] viewInfo = checkAndGetViewInfo();
 
-        return bucket.async().query(ViewQuery.from(viewInfo[0], viewInfo[1]))
+        return bucket.async()
+                     .query(ViewQuery.from(viewInfo[0], viewInfo[1]))
                      .flatMap(new Func1<AsyncViewResult, Observable<AsyncViewRow>>() {
                          @Override
                          public Observable<AsyncViewRow> call(AsyncViewResult asyncViewResult) {
                              return asyncViewResult.rows();
                          }
                      })
-                     .flatMap(new Func1<AsyncViewRow, Observable<SerializableDocument>>() {
+                     .map(new Func1<AsyncViewRow, String>() {
                          @Override
-                         public Observable<SerializableDocument> call(AsyncViewRow row) {
-                             return row.document(SerializableDocument.class);
+                         public String call(AsyncViewRow asyncViewRow) {
+                             return asyncViewRow.id();
                          }
                      });
     }
@@ -506,10 +521,22 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public void clear() {
         checkOpen();
         try {
-            bucket.bucketManager().flush();
+            internalClear(Actions.empty());
         } catch (Exception e) {
             throw new CacheException("Unable to clear", e);
         }
+    }
+
+    private void internalClear(Action1<? super SerializableDocument> action) {
+        getAllKeys()
+                .flatMap(new Func1<String, Observable<SerializableDocument>>() {
+                    @Override
+                    public Observable<SerializableDocument> call(String id) {
+                        return bucket.async().remove(id, SerializableDocument.class);
+                    }
+                })
+                .toBlocking()
+                .forEach(action);
     }
 
     @Override
