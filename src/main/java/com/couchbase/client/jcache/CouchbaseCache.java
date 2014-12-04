@@ -355,36 +355,82 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public boolean remove(K key, V oldValue) {
         checkOpen();
+        String cbKey = toInternalKey(key);
+        //TODO lock, expiry and stats
 
-        throw new UnsupportedOperationException();
+        V currentValue = internalGet(cbKey);
+        if (currentValue == null || !currentValue.equals(oldValue)) {
+            return false;
+        } else {
+            bucket.remove(cbKey, SerializableDocument.class);
+            return true;
+        }
     }
 
     @Override
     public V getAndRemove(K key) {
         checkOpen();
+        String cbKey = toInternalKey(key);
 
-        throw new UnsupportedOperationException();
+        //TODO locks, expiry and stats
+        V currentValue = internalGet(cbKey);
+        if (currentValue == null) {
+            return null;
+        } else {
+            bucket.remove(cbKey, SerializableDocument.class);
+            return currentValue;
+        }
     }
 
     @Override
     public boolean replace(K key, V oldValue, V newValue) {
         checkOpen();
+        String cbKey = toInternalKey(key);
+        if (oldValue == null) {
+            throw new NullPointerException("OldValue must not be null for key " + key);
+        }
+        if (newValue == null) {
+            throw new NullPointerException("NewValue must not be null for key " + key);
+        }
 
-        throw new UnsupportedOperationException();
+        //TODO locks, expiry and stats
+        V currentValue = internalGet(cbKey);
+        if (currentValue != null && currentValue.equals(oldValue)) {
+            internalPut(cbKey, newValue);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override
     public boolean replace(K key, V value) {
         checkOpen();
+        String cbKey = toInternalKey(key);
 
-        throw new UnsupportedOperationException();
+        //TODO locks, expiry and stats
+        V oldValue = internalGet(cbKey);
+        if (oldValue == null) {
+            return false;
+        } else {
+            internalPut(cbKey, value);
+            return true;
+        }
     }
 
     @Override
     public V getAndReplace(K key, V value) {
         checkOpen();
+        String cbKey = toInternalKey(key);
 
-        throw new UnsupportedOperationException();
+        //TODO locks, expiry and stats
+        V oldValue = internalGet(cbKey);
+        if (oldValue != null) {
+            internalPut(cbKey, value);
+            return oldValue;
+        } else {
+            return null;
+        }
     }
 
     @Override
