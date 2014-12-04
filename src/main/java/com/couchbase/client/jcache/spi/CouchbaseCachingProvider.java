@@ -25,6 +25,8 @@ import javax.cache.CacheManager;
 import javax.cache.configuration.OptionalFeature;
 import javax.cache.spi.CachingProvider;
 
+import com.couchbase.client.java.env.CouchbaseEnvironment;
+import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
 import com.couchbase.client.jcache.CouchbaseCacheManager;
 
 /**
@@ -37,9 +39,16 @@ import com.couchbase.client.jcache.CouchbaseCacheManager;
 public class CouchbaseCachingProvider implements CachingProvider {
 
     private WeakHashMap<ClassLoader, Map<URI, CacheManager>> managersByClassLoader;
+    private CouchbaseEnvironment env;
+
+    public CouchbaseCachingProvider(CouchbaseEnvironment environment) {
+        this.managersByClassLoader = new WeakHashMap<ClassLoader, Map<URI, CacheManager>>();
+        //TODO validate this way to pass a full-fledged ClusterEnvironment
+        this.env = environment;
+    }
 
     public CouchbaseCachingProvider() {
-        this.managersByClassLoader = new WeakHashMap<ClassLoader, Map<URI, CacheManager>>();
+        this(DefaultCouchbaseEnvironment.create());
     }
 
     @Override
@@ -59,6 +68,22 @@ public class CouchbaseCachingProvider implements CachingProvider {
     @Override
     public Properties getDefaultProperties() {
         return new Properties();
+    }
+
+    public CouchbaseEnvironment getEnvironment() {
+        return this.env;
+    }
+
+    /**
+     * Replaces the cluster environment to be used by cacheManagers with the one given. Will shutdown the current one
+     * and {@link #close() close all} open cacheManagers beforehand.
+     *
+     * @param env the new {@link CouchbaseEnvironment} to be used
+     */
+    public void setEnvironment(CouchbaseEnvironment env) {
+        this.close();
+        env.shutdown();
+        this.env = env;
     }
 
     @Override
