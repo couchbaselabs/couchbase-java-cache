@@ -173,6 +173,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public V get(K key) {
+        //TODO locks and expiry
         checkOpen();
         long start = (isStatisticsEnabled()) ? System.nanoTime() : 0;
         String cbKey = toInternalKey(key);
@@ -232,18 +233,21 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public boolean containsKey(K key) {
         checkOpen();
 
+        //TODO locks, maybe expiry
+
         return bucket.get(String.valueOf(key)) != null;
     }
 
     @Override
     public void loadAll(Set<? extends K> keys, boolean replaceExistingValues, CompletionListener completionListener) {
         checkOpen();
-
+        //TODO implement
         throw new UnsupportedOperationException();
     }
 
     @Override
     public void put(K key, V value) {
+        //TODO locks, check expiry
         checkOpen();
         checkTypes(key, value);
 
@@ -264,6 +268,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public V getAndPut(K key, V value) {
+        //TODO locks, double check statistics, expiry
         checkOpen();
         checkTypes(key, value);
 
@@ -295,6 +300,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public boolean putIfAbsent(K key, V value) {
+        //TODO locks, expiry
         checkOpen();
         checkTypes(key, value);
         String internalKey = toInternalKey(key);
@@ -306,7 +312,6 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             }
             return false;
         } else {
-            //TODO the key should be locked here and other instances of the cache should not be able to insert it
             if (isStatisticsEnabled()) {
                 statisticsMxBean.increaseCacheMisses(1L);
             }
@@ -329,6 +334,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public boolean remove(K key) {
+        //TODO locks, expiry
         checkOpen();
         if (key == null) {
             throw new NullPointerException("Removed key cannot be null");
