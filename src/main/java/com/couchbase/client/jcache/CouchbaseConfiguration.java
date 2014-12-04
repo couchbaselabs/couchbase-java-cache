@@ -22,6 +22,8 @@
 package com.couchbase.client.jcache;
 
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.cache.configuration.CompleteConfiguration;
 import javax.cache.configuration.MutableConfiguration;
@@ -41,24 +43,33 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     public static final String DEFAULT_BUCKET_NAME = "default";
     public static final String DEFAULT_BUCKET_PASSWORD = "";
     public static final String DEFAULT_CACHE_PREFIX = "";
+    public static final String DEFAULT_VIEWALL_DESIGNDOC = "jcache";
 
     private final String bucketName;
     private final String bucketPassword;
     private final String cachePrefix;
+    private final String viewAllDesignDoc;
+    private final Map<String, String> viewAllViews;
 
     private CouchbaseConfiguration(CompleteConfiguration<K, V> configuration,
-            String bucketName, String bucketPassword, String cachePrefix) {
+            String bucketName, String bucketPassword, String cachePrefix,
+            String viewAllDesignDoc, Map<String, String> viewAllViews) {
         super(configuration);
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
+        this.viewAllDesignDoc = viewAllDesignDoc;
+        this.viewAllViews = viewAllViews;
     }
 
-    private CouchbaseConfiguration(String bucketName, String bucketPassword, String cachePrefix) {
+    private CouchbaseConfiguration(String bucketName, String bucketPassword,
+            String cachePrefix, String viewAllDesignDoc, Map<String, String> viewAllViews) {
         super();
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
+        this.viewAllDesignDoc = viewAllDesignDoc;
+        this.viewAllViews = viewAllViews;
     }
 
     /**
@@ -71,6 +82,8 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         this.bucketName = configuration.bucketName;
         this.bucketPassword = configuration.bucketPassword;
         this.cachePrefix = configuration.cachePrefix;
+        this.viewAllDesignDoc = configuration.viewAllDesignDoc;
+        this.viewAllViews = new HashMap<String, String>(configuration.viewAllViews);
     }
 
     /**
@@ -100,6 +113,38 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     }
 
     /**
+     * In order to be able to list all elements present in cache, a view must
+     * be created for each cache. These view are expected to be created by the
+     * user. Standard name for a view is the cache's name, but one can change
+     * this when creating the configuration.
+     *
+     * This method returns the view name for a given cache.
+     *
+     * @param cacheName the cache for which we want a view name
+     * @return the corresponding view name
+     * @see #getAllViewDesignDoc
+     */
+    public String getAllViewName(String cacheName) {
+        String allViewName = this.viewAllViews.get(cacheName);
+        if (allViewName != null) {
+            return allViewName;
+        }
+        return cacheName;
+    }
+
+    /**
+     * In order to list all elements present in cache, a view must
+     * be created for each cache. These view are expected to be created by the
+     * user. They must all be under the same design document, as returned by
+     * this method.
+     *
+     * @return the name of the design document containing the views for managed caches.
+     */
+    public String getAllViewDesignDoc() {
+        return this.viewAllDesignDoc;
+    }
+
+    /**
      * Builder for creating {@link CouchbaseConfiguration CouchbaseConfigurations}.
      */
     public static final class Builder<K, V> {
@@ -108,7 +153,9 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         private String bucketName;
         private String bucketPassword;
         private String cachePrefix;
+        private String viewAllDesignDoc;
 
+        private final Map<String, String> viewAllViews = new HashMap<String, String>();
 
         /**
          * Copy a given {@link CompleteConfiguration} as the base
@@ -187,16 +234,53 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         }
 
         /**
+         * Indicates that the views that can enumerate the content of
+         * each cache are found under design document <i>designDoc</i>.
+         *
+         * Defaults to {@link CouchbaseConfiguration#DEFAULT_VIEWALL_DESIGNDOC}.
+         *
+         * @param designDoc the name of the design document
+         * @return this {@link Builder} for chaining calls
+         */
+        public Builder viewAllDesignDoc(String designDoc) {
+            this.viewAllDesignDoc = designDoc;
+            return this;
+        }
+
+        /**
+         * Indicates which view should be queried when attempting to enumerate the
+         * values in cache <i>cacheName</i>.
+         *
+         * Default is to use the cacheName as view name.
+         *
+         * @param cacheName the name of the cache for which to configure a view
+         * @param viewAllViewName the name of the view to be used for this cache
+         * @return this {@link Builder} for chaining calls
+         */
+        public Builder viewAllForCache(String cacheName, String viewAllViewName) {
+            this.viewAllViews.put(cacheName, viewAllViewName);
+            return this;
+        }
+
+        /**
          * Create the appropriate {@link CouchbaseConfiguration} from this {@link Builder}.
          *
          * @return the built CouchbaseConfiguration
          */
         public CouchbaseConfiguration<K, V> build() {
-            if (base == null) {
-                return new CouchbaseConfiguration<K, V>(bucketName, bucketPassword, cachePrefix);
-            } else {
-                return new CouchbaseConfiguration<K, V>(base, bucketName, bucketPassword, cachePrefix);
+            CouchbaseConfiguration config;
+            if (viewAllDesignDoc == null) {
+                viewAllDesignDoc = DEFAULT_VIEWALL_DESIGNDOC;
             }
+
+            if (base == null) {
+                config = new CouchbaseConfiguration<K, V>(bucketName, bucketPassword, cachePrefix,
+                        viewAllDesignDoc, viewAllViews);
+            } else {
+                config = new CouchbaseConfiguration<K, V>(base, bucketName, bucketPassword, cachePrefix,
+                        viewAllDesignDoc, viewAllViews);
+            }
+            return config;
         }
     }
 }

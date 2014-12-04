@@ -36,7 +36,6 @@ import javax.cache.CacheException;
 import javax.cache.CacheManager;
 import javax.cache.configuration.CacheEntryListenerConfiguration;
 import javax.cache.configuration.Configuration;
-import javax.cache.event.CacheEntryRemovedListener;
 import javax.cache.expiry.Duration;
 import javax.cache.expiry.ExpiryPolicy;
 import javax.cache.integration.CacheLoader;
@@ -50,9 +49,16 @@ import com.couchbase.client.core.logging.CouchbaseLogger;
 import com.couchbase.client.core.logging.CouchbaseLoggerFactory;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.document.SerializableDocument;
+import com.couchbase.client.java.view.AsyncViewResult;
+import com.couchbase.client.java.view.AsyncViewRow;
+import com.couchbase.client.java.view.DesignDocument;
+import com.couchbase.client.java.view.View;
+import com.couchbase.client.java.view.ViewQuery;
 import com.couchbase.client.jcache.management.CouchbaseCacheMxBean;
 import com.couchbase.client.jcache.management.CouchbaseStatisticsMxBean;
 import com.couchbase.client.jcache.management.ManagementUtil;
+import rx.Observable;
+import rx.functions.Func1;
 
 /**
  * The Couchbase implementation of a @{link Cache}.
@@ -428,9 +434,55 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public Iterator<Entry<K, V>> iterator() {
         checkOpen();
 
-        return null;
+        return getAllDocuments()
+                .map(new Func1<SerializableDocument, Entry<K, V>>() {
+                    @Override
+                    public Entry<K, V> call(SerializableDocument serializableDocument) {
+                        return new CouchbaseCacheEntry(serializableDocument.id(), serializableDocument.content());
+                    }
+                }).toBlocking().getIterator();
     }
 
+    private String[] checkAndGetViewInfo() {
+        String expectedDesignDoc = configuration.getAllViewDesignDoc();
+        String expectedViewName = configuration.getAllViewName(getName());
+        Exception cause = null;
+
+        try {
+            DesignDocument designDoc = bucket.bucketManager().getDesignDocument(expectedDesignDoc);
+            if (designDoc == null) {
+                cause = new NullPointerException("Design document " + expectedDesignDoc + " does not exist");
+            } else {
+                for (View view : designDoc.views()) {
+                    if (view.name() == expectedViewName) {
+                        return new String[] { expectedDesignDoc, expectedViewName };
+                    }
+                }
+            }
+        } catch (Exception e) {
+            cause = e;
+        }
+        throw new CacheException("Cannot find view " + expectedDesignDoc + "/" + expectedViewName
+                + " for cache " + getName() + ",did you create it?", cause);
+    }
+
+    private Observable<SerializableDocument> getAllDocuments() {
+        String[] viewInfo = checkAndGetViewInfo();
+
+        return bucket.async().query(ViewQuery.from(viewInfo[0], viewInfo[1]))
+                     .flatMap(new Func1<AsyncViewResult, Observable<AsyncViewRow>>() {
+                         @Override
+                         public Observable<AsyncViewRow> call(AsyncViewResult asyncViewResult) {
+                             return asyncViewResult.rows();
+                         }
+                     })
+                     .flatMap(new Func1<AsyncViewRow, Observable<SerializableDocument>>() {
+                         @Override
+                         public Observable<SerializableDocument> call(AsyncViewRow row) {
+                             return row.document(SerializableDocument.class);
+                         }
+                     });
+    }
 
     @Override
     public <C extends Configuration<K, V>> C getConfiguration(Class<C> clazz) {
