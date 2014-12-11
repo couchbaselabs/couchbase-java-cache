@@ -55,7 +55,8 @@ public class CouchbaseCacheManager implements CacheManager {
 
     private volatile boolean isClosed;
 
-    private final Cluster cluster;
+    /* package protected*/
+    final Cluster cluster;
 
     /**
      * Creates a new CouchbaseCacheManager.

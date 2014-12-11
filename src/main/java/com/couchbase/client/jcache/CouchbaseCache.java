@@ -82,7 +82,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     private volatile boolean isClosed;
 
-    private final Bucket bucket;
+    /*package scope*/
+    final Bucket bucket;
     private final String keyPrefix;
 
     /* package scope*/
