@@ -119,7 +119,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             setStatisticsEnabled(true);
         }
 
-        this.keyPrefix = configuration.getCachePrefix();
+        this.keyPrefix = configuration.getCachePrefix() == null ? "" : configuration.getCachePrefix();
         this.bucket = cacheManager.getCluster().openBucket(configuration.getBucketName(),
                 configuration.getBucketPassword());
     }
@@ -236,7 +236,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
         //TODO locks, maybe expiry
 
-        return bucket.get(String.valueOf(key)) != null;
+        return bucket.get(toInternalKey(key), SerializableDocument.class) != null;
     }
 
     @Override
