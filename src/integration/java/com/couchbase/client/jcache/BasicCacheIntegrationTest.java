@@ -50,18 +50,23 @@ public class BasicCacheIntegrationTest {
         cacheManager = (CouchbaseCacheManager) cachingProvider.getCacheManager();
 
         //here we create a dedicated cache for most of the tests
-        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>()
+        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>("dedicatedCache")
                 .defaultBase()
                 .useBucket("jcache", "jcache")
                 .build();
         dedicatedCache = (CouchbaseCache<String, String>) cacheManager.createCache("dedicatedCache", cbConfig);
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void shouldRefuseToBuildCacheWithIncoherentNameInConfig() {
+        cacheManager.createCache("toto", CouchbaseConfiguration.builder("tata").build());
+    }
+
     @Test
     public void shouldPersistInDefaultBucketWithCorrectPrefix() {
         final String cacheName = "cacheA";
 
-        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>()
+        CouchbaseConfiguration<String, String> cbConfig = CouchbaseConfiguration.builder(cacheName)
                 .defaultBase()
                 .useDefaultBucket()
                 .shared(cacheName + "_")
@@ -90,7 +95,7 @@ public class BasicCacheIntegrationTest {
     public void shouldPersistInDedicatedBucketWithoutPrefix() {
         final String cacheName = "cacheB";
         final String bucketName = "jcache";
-        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>()
+        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>(cacheName)
                 .defaultBase()
                 .useBucket(bucketName, "jcache")
                 .build();

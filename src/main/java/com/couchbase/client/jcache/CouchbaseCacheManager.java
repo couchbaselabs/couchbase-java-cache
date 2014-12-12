@@ -125,12 +125,16 @@ public class CouchbaseCacheManager implements CacheManager {
                     + CouchbaseConfiguration.class.getName());
         }
         CouchbaseConfiguration<K, V> couchbaseConfiguration = (CouchbaseConfiguration<K, V>) configuration;
+        if (!cacheName.equals(couchbaseConfiguration.getCacheName())) {
+            throw new IllegalArgumentException("Cache name " + cacheName + " expected in configuration, was "
+                + couchbaseConfiguration.getCacheName());
+        }
 
         synchronized (caches) {
             if (caches.containsKey(cacheName)) {
                 throw new IllegalArgumentException("Cache " + cacheName + " already exist");
             } else {
-                CouchbaseCache<K, V> cache = new CouchbaseCache<K, V>(this, cacheName, couchbaseConfiguration);
+                CouchbaseCache<K, V> cache = new CouchbaseCache<K, V>(this, couchbaseConfiguration);
                 caches.put(cacheName, cache);
                 return cache;
             }

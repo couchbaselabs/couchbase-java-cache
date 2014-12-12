@@ -42,11 +42,13 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     private final String cachePrefix;
     private final String viewAllDesignDoc;
     private final Map<String, String> viewAllViews;
+    private final String cacheName;
 
-    private CouchbaseConfiguration(CompleteConfiguration<K, V> configuration,
+    private CouchbaseConfiguration(String cacheName, CompleteConfiguration<K, V> configuration,
             String bucketName, String bucketPassword, String cachePrefix,
             String viewAllDesignDoc, Map<String, String> viewAllViews) {
         super(configuration);
+        this.cacheName = cacheName;
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
@@ -54,9 +56,10 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         this.viewAllViews = viewAllViews;
     }
 
-    private CouchbaseConfiguration(String bucketName, String bucketPassword,
+    private CouchbaseConfiguration(String cacheName, String bucketName, String bucketPassword,
             String cachePrefix, String viewAllDesignDoc, Map<String, String> viewAllViews) {
         super();
+        this.cacheName = cacheName;
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
@@ -71,6 +74,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
      */
     /*package*/ CouchbaseConfiguration(CouchbaseConfiguration<K, V> configuration) {
         super(configuration);
+        this.cacheName = configuration.getCacheName();
         this.bucketName = configuration.bucketName;
         this.bucketPassword = configuration.bucketPassword;
         this.cachePrefix = configuration.cachePrefix;
@@ -137,6 +141,25 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     }
 
     /**
+     * The name of the cache this configuration will be used to create.
+     *
+     * @return the name of the cache.
+     */
+    public String getCacheName() {
+        return cacheName;
+    }
+
+    /**
+     * Creates and return a {@link Builder} for creating configuration for a {@link CouchbaseCache} with the given name.
+     *
+     * @param name the name of the cache to be created via the produced configuration.
+     * @return a new builder.
+     */
+    public static <K, V> Builder<K, V> builder(String name) {
+        return new Builder(name);
+    }
+
+    /**
      * Builder for creating {@link CouchbaseConfiguration CouchbaseConfigurations}.
      */
     public static final class Builder<K, V> {
@@ -146,8 +169,22 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         private String bucketPassword;
         private String cachePrefix;
         private String viewAllDesignDoc;
+        private final String cacheName;
 
         private final Map<String, String> viewAllViews = new HashMap<String, String>();
+
+        protected Builder(String cacheName) {
+            this.cacheName = cacheName;
+        }
+
+        /**
+         * Defines what the name of the cache to be built from this configuration will be.
+         *
+         * @return the name of the cache.
+         */
+        public String getCacheName() {
+            return this.cacheName;
+        }
 
         /**
          * Copy a given {@link CompleteConfiguration} as the base
@@ -266,10 +303,10 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
             }
 
             if (base == null) {
-                config = new CouchbaseConfiguration<K, V>(bucketName, bucketPassword, cachePrefix,
+                config = new CouchbaseConfiguration<K, V>(cacheName, bucketName, bucketPassword, cachePrefix,
                         viewAllDesignDoc, viewAllViews);
             } else {
-                config = new CouchbaseConfiguration<K, V>(base, bucketName, bucketPassword, cachePrefix,
+                config = new CouchbaseConfiguration<K, V>(cacheName, base, bucketName, bucketPassword, cachePrefix,
                         viewAllDesignDoc, viewAllViews);
             }
             return config;

@@ -87,10 +87,12 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     private final String keyPrefix;
 
     /* package scope*/
-    <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, String name,
-            CouchbaseConfiguration<K, V> conf) {
+    <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, CouchbaseConfiguration<K, V> conf) {
         this.cacheManager = cacheManager;
-        this.name = name;
+        if (conf.getCacheName() == null) {
+            throw new NullPointerException("Cache name in configuration cannot be null");
+        }
+        this.name = conf.getCacheName();
         //make a local copy of the configuration for this cache
         this.configuration = new CouchbaseConfiguration<K, V>(conf);
 
