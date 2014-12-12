@@ -32,39 +32,38 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
 
     public static final long serialVersionUID = 1L;
 
-    public static final String DEFAULT_BUCKET_NAME = "default";
-    public static final String DEFAULT_BUCKET_PASSWORD = "";
-    public static final String DEFAULT_CACHE_PREFIX = "";
+    public static final String DEFAULT_BUCKET_NAME = "jcache";
+    public static final String DEFAULT_BUCKET_PASSWORD = "jcache";
     public static final String DEFAULT_VIEWALL_DESIGNDOC = "jcache";
 
     private final String bucketName;
     private final String bucketPassword;
     private final String cachePrefix;
     private final String viewAllDesignDoc;
-    private final Map<String, String> viewAllViews;
+    private final String viewAllViewName;
     private final String cacheName;
 
     private CouchbaseConfiguration(String cacheName, CompleteConfiguration<K, V> configuration,
             String bucketName, String bucketPassword, String cachePrefix,
-            String viewAllDesignDoc, Map<String, String> viewAllViews) {
+            String viewAllDesignDoc, String viewAllViewName) {
         super(configuration);
         this.cacheName = cacheName;
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
         this.viewAllDesignDoc = viewAllDesignDoc;
-        this.viewAllViews = viewAllViews;
+        this.viewAllViewName = viewAllViewName;
     }
 
     private CouchbaseConfiguration(String cacheName, String bucketName, String bucketPassword,
-            String cachePrefix, String viewAllDesignDoc, Map<String, String> viewAllViews) {
+            String cachePrefix, String viewAllDesignDoc, String viewAllViewName) {
         super();
         this.cacheName = cacheName;
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
         this.viewAllDesignDoc = viewAllDesignDoc;
-        this.viewAllViews = viewAllViews;
+        this.viewAllViewName = viewAllViewName;
     }
 
     /**
@@ -79,7 +78,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         this.bucketPassword = configuration.bucketPassword;
         this.cachePrefix = configuration.cachePrefix;
         this.viewAllDesignDoc = configuration.viewAllDesignDoc;
-        this.viewAllViews = new HashMap<String, String>(configuration.viewAllViews);
+        this.viewAllViewName = configuration.viewAllViewName;
     }
 
     /**
@@ -114,18 +113,13 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
      * user. Standard name for a view is the cache's name, but one can change
      * this when creating the configuration.
      *
-     * This method returns the view name for a given cache.
+     * This method returns the view name for the cache associated.
      *
-     * @param cacheName the cache for which we want a view name
-     * @return the corresponding view name
+     * @return the view name for this cache
      * @see #getAllViewDesignDoc
      */
-    public String getAllViewName(String cacheName) {
-        String allViewName = this.viewAllViews.get(cacheName);
-        if (allViewName != null) {
-            return allViewName;
-        }
-        return cacheName;
+    public String getAllViewName() {
+        return this.viewAllViewName;
     }
 
     /**
@@ -152,6 +146,11 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     /**
      * Creates and return a {@link Builder} for creating configuration for a {@link CouchbaseCache} with the given name.
      *
+     * The default is to use a shared bucket {@value CouchbaseConfiguration#DEFAULT_BUCKET_NAME}, with the name of the
+     * cache followed by an underscore as the prefix for keys in said bucket. To enumerate all values in the cache, a
+     * view is used, defaults to {@value CouchbaseConfiguration#DEFAULT_VIEWALL_DESIGNDOC} for the design document and
+     * the name of the cache for the view.
+     *
      * @param name the name of the cache to be created via the produced configuration.
      * @return a new builder.
      * @throws NullPointerException if the given cache name is null
@@ -177,21 +176,16 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         private String bucketPassword;
         private String cachePrefix;
         private String viewAllDesignDoc;
+        private String viewAllViewName;
         private final String cacheName;
-
-        private final Map<String, String> viewAllViews = new HashMap<String, String>();
 
         protected Builder(String cacheName) {
             this.cacheName = cacheName;
-        }
-
-        /**
-         * Defines what the name of the cache to be built from this configuration will be.
-         *
-         * @return the name of the cache.
-         */
-        public String getCacheName() {
-            return this.cacheName;
+            this.bucketName = CouchbaseConfiguration.DEFAULT_BUCKET_NAME;
+            this.bucketPassword = CouchbaseConfiguration.DEFAULT_BUCKET_PASSWORD;
+            this.cachePrefix = cacheName + "_";
+            this.viewAllDesignDoc = CouchbaseConfiguration.DEFAULT_VIEWALL_DESIGNDOC;
+            this.viewAllViewName = cacheName;
         }
 
         /**
@@ -201,7 +195,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @param base the configuration to use as a base
          * @return this {@link Builder} for chaining calls
          */
-        public Builder from(CompleteConfiguration<K, V> base) {
+        public Builder useBase(CompleteConfiguration<K, V> base) {
             this.base = base;
             return this;
         }
@@ -217,14 +211,31 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         }
 
         /**
+         * Instruct this {@link CouchbaseConfiguration} to use a dedicated bucket
+         * as the underlying {@link Bucket}. Note that this reverts to using no
+         * prefix for the keys, call {@link #withPrefix} <b>after</b> calling this method
+         * to change that.
+         */
+        public Builder useDedicatedBucket(String bucketName, String bucketPassword) {
+            this.bucketName = bucketName;
+            this.bucketPassword = bucketPassword;
+            this.cachePrefix = "";
+            return this;
+        }
+
+        /**
          * Instruct this {@link CouchbaseConfiguration} to use default bucket
          * information to connect to the underlying {@link Bucket}.
+         *
+         * Since default bucket for JCache can be used by several caches, the
+         * default prefix will be used, which is the name of the cache followed
+         * by an underscore, unless you call {@link #withPrefix}
          *
          * @return this {@link Builder} for chaining calls
          * @see #DEFAULT_BUCKET_NAME
          * @see #DEFAULT_BUCKET_PASSWORD
          */
-        public Builder useDefaultBucket() {
+        public Builder useDefaultSharedBucket() {
             this.bucketName = DEFAULT_BUCKET_NAME;
             this.bucketPassword = DEFAULT_BUCKET_PASSWORD;
             return this;
@@ -234,39 +245,47 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * Instruct this {@link CouchbaseConfiguration} to use given
          * information to connect to the underlying {@link Bucket}.
          *
+         * Since default bucket for JCache can be used by several caches, the
+         * default prefix will be used, which is the name of the cache followed
+         * by an underscore, unless you call {@link #withPrefix}
+         *
          * @param name the name of the bucket
          * @param password the password for the bucket
          * @return this {@link Builder} for chaining calls
          */
-        public Builder useBucket(String name, String password) {
+        public Builder useSharedBucket(String name, String password) {
             this.bucketName = name;
             this.bucketPassword = password;
             return this;
         }
 
         /**
-         * Indicate that the underlying {@link Bucket} can be shared
-         * between several caches and that keys should be prefixed by
-         * <i>prefix</i> for the cache associated to this configuration.
+         * Indicate that the underlying {@link Bucket}'s keys should be
+         * prefixed by <i>prefix</i> for the cache associated to this configuration.
          *
          * @param prefix the prefix to use for keys in the associated cache
          * @return this {@link Builder} for chaining calls
          */
-        public Builder shared(String prefix) {
-            this.cachePrefix = prefix;
+        public Builder withPrefix(String prefix) {
+            this.cachePrefix = (prefix == null) ? "" : prefix;
             return this;
         }
 
         /**
-         * Indicate that the underlying {@link Bucket} is not shared
-         * between several caches but only used to back up the one
-         * cache associated with this configuration. As such there is
-         * no need to add a prefix to keys.
+         * Indicates that the views that can enumerate the content of
+         * each cache are found under design document <i>designDoc</i>,
+         * view <i>viewName</i>.
          *
+         * Defaults to {@link CouchbaseConfiguration#DEFAULT_VIEWALL_DESIGNDOC}
+         * and the cacheName as viewName.
+         *
+         * @param designDoc the name of the design document
+         * @param viewName the name of the view
          * @return this {@link Builder} for chaining calls
          */
-        public Builder dedicated() {
-            this.cachePrefix = DEFAULT_CACHE_PREFIX;
+        public Builder viewAll(String designDoc, String viewName) {
+            this.viewAllDesignDoc = designDoc == null ? CouchbaseConfiguration.DEFAULT_VIEWALL_DESIGNDOC : designDoc;
+            this.viewAllViewName = viewName == null ? this.cacheName : viewName;
             return this;
         }
 
@@ -274,29 +293,13 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * Indicates that the views that can enumerate the content of
          * each cache are found under design document <i>designDoc</i>.
          *
-         * Defaults to {@link CouchbaseConfiguration#DEFAULT_VIEWALL_DESIGNDOC}.
+         * Keeps the view name's default, which is the cacheName.
          *
          * @param designDoc the name of the design document
          * @return this {@link Builder} for chaining calls
          */
         public Builder viewAllDesignDoc(String designDoc) {
-            this.viewAllDesignDoc = designDoc;
-            return this;
-        }
-
-        /**
-         * Indicates which view should be queried when attempting to enumerate the
-         * values in cache <i>cacheName</i>.
-         *
-         * Default is to use the cacheName as view name.
-         *
-         * @param cacheName the name of the cache for which to configure a view
-         * @param viewAllViewName the name of the view to be used for this cache
-         * @return this {@link Builder} for chaining calls
-         */
-        public Builder viewAllForCache(String cacheName, String viewAllViewName) {
-            this.viewAllViews.put(cacheName, viewAllViewName);
-            return this;
+            return this.viewAll(designDoc, this.viewAllViewName);
         }
 
         /**
@@ -312,10 +315,10 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
 
             if (base == null) {
                 config = new CouchbaseConfiguration<K, V>(cacheName, bucketName, bucketPassword, cachePrefix,
-                        viewAllDesignDoc, viewAllViews);
+                        viewAllDesignDoc, viewAllViewName);
             } else {
                 config = new CouchbaseConfiguration<K, V>(cacheName, base, bucketName, bucketPassword, cachePrefix,
-                        viewAllDesignDoc, viewAllViews);
+                        viewAllDesignDoc, viewAllViewName);
             }
             return config;
         }

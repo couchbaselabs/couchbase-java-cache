@@ -507,7 +507,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     private String[] checkAndGetViewInfo() {
         String expectedDesignDoc = configuration.getAllViewDesignDoc();
-        String expectedViewName = configuration.getAllViewName(getName());
+        String expectedViewName = configuration.getAllViewName();
         Exception cause = null;
 
         try {

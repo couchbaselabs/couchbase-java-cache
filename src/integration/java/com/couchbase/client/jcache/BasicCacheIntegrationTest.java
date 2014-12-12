@@ -51,8 +51,6 @@ public class BasicCacheIntegrationTest {
 
         //here we create a dedicated cache for most of the tests
         CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>("dedicatedCache")
-                .defaultBase()
-                .useBucket("jcache", "jcache")
                 .build();
         dedicatedCache = (CouchbaseCache<String, String>) cacheManager.createCache("dedicatedCache", cbConfig);
     }
@@ -63,20 +61,21 @@ public class BasicCacheIntegrationTest {
     }
 
     @Test
-    public void shouldPersistInDefaultBucketWithCorrectPrefix() {
+    public void shouldPersistInDefaultSharedBucketWithCorrectPrefix() {
         final String cacheName = "cacheA";
+        final String prefixKey = "prefix_";
+        final String realKey = prefixKey +  "test";
 
         CouchbaseConfiguration<String, String> cbConfig = CouchbaseConfiguration.builder(cacheName)
                 .defaultBase()
-                .useDefaultBucket()
-                .shared(cacheName + "_")
+                .useDefaultSharedBucket()
+                .withPrefix(prefixKey)
                 .build();
 
         CouchbaseCache<String, String> cacheA = (CouchbaseCache<String, String>) cacheManager.createCache(cacheName, cbConfig);
         cacheA.put("test", "testValue");
 
-        String realKey = cacheName + "_test";
-        assertEquals("default", cacheA.bucket.name());
+        assertEquals(CouchbaseConfiguration.DEFAULT_BUCKET_NAME, cacheA.bucket.name());
         assertNull(cacheA.bucket.get("test"));
         assertNull(cacheA.bucket.get("test", SerializableDocument.class));
         try {
@@ -94,38 +93,44 @@ public class BasicCacheIntegrationTest {
     @Test
     public void shouldPersistInDedicatedBucketWithoutPrefix() {
         final String cacheName = "cacheB";
-        final String bucketName = "jcache";
+        final String bucketName = "default";
+        final String key = "shouldPersistInDedicatedBucketWithoutPrefix";
         CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>(cacheName)
                 .defaultBase()
-                .useBucket(bucketName, "jcache")
+                .useDedicatedBucket(bucketName, "")
                 .build();
 
         CouchbaseCache<String, String> cacheB = (CouchbaseCache<String, String>) cacheManager.createCache(cacheName,
                 cbConfig);
-        cacheB.put("test", "testValue");
+        cacheB.put(key, "testValue");
 
         assertEquals(bucketName, cacheB.bucket.name());
         try {
-            cacheB.bucket.get("test");
+            cacheB.bucket.get(key);
             fail("did expect a transcodingException here");
         } catch (TranscodingException e) {
             //EXPECTED
         } catch (Exception e) {
             fail(e.toString());
         }
-        assertNotNull(cacheB.bucket.get("test", SerializableDocument.class));
-        assertTrue(cacheB.bucket.get("test", SerializableDocument.class).content() instanceof String);
+        assertNotNull(cacheB.bucket.get(key, SerializableDocument.class));
+        assertTrue(cacheB.bucket.get(key, SerializableDocument.class).content() instanceof String);
     }
 
+    @Test
+    public void shouldGetExistingCache() {
+        Cache<String, String> cache = cacheManager.getCache("dedicatedCache");
+        assertNotNull(cache);
+        assertEquals(dedicatedCache, cache);
+    }
 
 
     @Test
     public void shouldCorrectlyRemove() {
-        Cache<Object, Object> cache = cacheManager.getCache("dedicatedCache");
-        cache.put("removeMe", "testValue");
-        assertTrue(cache.containsKey("removeMe"));
-        cache.remove("removeMe");
-        assertFalse(cache.containsKey("removeMe"));
+        dedicatedCache.put("removeMe", "testValue");
+        assertTrue(dedicatedCache.containsKey("removeMe"));
+        dedicatedCache.remove("removeMe");
+        assertFalse(dedicatedCache.containsKey("removeMe"));
     }
 
     @AfterClass
