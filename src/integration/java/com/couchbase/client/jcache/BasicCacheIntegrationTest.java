@@ -70,19 +70,20 @@ public class BasicCacheIntegrationTest {
         CouchbaseCache<String, String> cacheA = (CouchbaseCache<String, String>) cacheManager.createCache(cacheName, cbConfig);
         cacheA.put("test", "testValue");
 
+        String realKey = cacheName + "_test";
         assertEquals("default", cacheA.bucket.name());
         assertNull(cacheA.bucket.get("test"));
         assertNull(cacheA.bucket.get("test", SerializableDocument.class));
         try {
-            cacheA.bucket.get("cache1_test");
+            cacheA.bucket.get(realKey);
             fail("did not expect to get this as a JsonDocument");
         } catch (TranscodingException e) {
             //EXPECTED
         } catch (Exception e) {
             fail(e.toString());
         }
-        assertNotNull(cacheA.bucket.get("cache1_test", SerializableDocument.class));
-        assertTrue(cacheA.bucket.get("cache1_test", SerializableDocument.class).content() instanceof String);
+        assertNotNull(cacheA.bucket.get(realKey, SerializableDocument.class));
+        assertTrue(cacheA.bucket.get(realKey, SerializableDocument.class).content() instanceof String);
     }
 
     @Test
