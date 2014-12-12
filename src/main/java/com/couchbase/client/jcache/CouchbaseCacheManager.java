@@ -76,7 +76,11 @@ public class CouchbaseCacheManager implements CacheManager {
         this.caches = new HashMap<String, Cache>();
         // this.isClosed defaults to false
 
-        this.cluster = CouchbaseCluster.create(provider.getEnvironment());
+        if (provider.getEnvironment() == null) {
+            this.cluster = CouchbaseCluster.create(provider.getBoostrap());
+        } else {
+            this.cluster = CouchbaseCluster.create(provider.getEnvironment(), provider.getBoostrap());
+        }
     }
 
     @Override

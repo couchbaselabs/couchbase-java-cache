@@ -15,7 +15,10 @@ package com.couchbase.client.jcache.spi;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.WeakHashMap;
@@ -26,7 +29,6 @@ import javax.cache.configuration.OptionalFeature;
 import javax.cache.spi.CachingProvider;
 
 import com.couchbase.client.java.env.CouchbaseEnvironment;
-import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
 import com.couchbase.client.jcache.CouchbaseCacheManager;
 
 /**
@@ -38,17 +40,16 @@ import com.couchbase.client.jcache.CouchbaseCacheManager;
  */
 public class CouchbaseCachingProvider implements CachingProvider {
 
+    private static final String DEFAULT_BOOTSTRAP = "127.0.0.1";
+
     private WeakHashMap<ClassLoader, Map<URI, CacheManager>> managersByClassLoader;
     private CouchbaseEnvironment env;
-
-    public CouchbaseCachingProvider(CouchbaseEnvironment environment) {
-        this.managersByClassLoader = new WeakHashMap<ClassLoader, Map<URI, CacheManager>>();
-        //TODO validate this way to pass a full-fledged ClusterEnvironment
-        this.env = environment;
-    }
+    private List<String> bootstrap;
 
     public CouchbaseCachingProvider() {
-        this(DefaultCouchbaseEnvironment.create());
+        this.managersByClassLoader = new WeakHashMap<ClassLoader, Map<URI, CacheManager>>();
+        this.env = null; //null here should lead to the cluster constructor without environment being called
+        this.bootstrap = Collections.singletonList(DEFAULT_BOOTSTRAP);
     }
 
     @Override
@@ -70,20 +71,61 @@ public class CouchbaseCachingProvider implements CachingProvider {
         return new Properties();
     }
 
+    /**
+     * @return the environment to be used by the underlying clusters, or null if the default one is to be used.
+     */
     public CouchbaseEnvironment getEnvironment() {
         return this.env;
     }
 
     /**
-     * Replaces the cluster environment to be used by cacheManagers with the one given. Will shutdown the current one
-     * and {@link #close() close all} open cacheManagers beforehand.
+     * Replaces the cluster environment to be used by cacheManagers with the one given.
+     * Since multiple parallel environments are discouraged, it will also {@link #close() close all}
+     * open cacheManagers beforehand.
      *
      * @param env the new {@link CouchbaseEnvironment} to be used
      */
     public void setEnvironment(CouchbaseEnvironment env) {
         this.close();
-        env.shutdown();
         this.env = env;
+    }
+
+    /**
+     * This is the bootstrap list of ip/hosts used to initiate a connection to the underlying cluster.
+     *
+     * @return the list of nodes to bootstrap from
+     */
+    public List<String> getBoostrap() {
+        return this.bootstrap;
+    }
+
+    /**
+     * Set the bootstrap list used to initiate a connection to the underlying cluster.
+     * It will be used by any {@link CouchbaseCacheManager} created after this point.
+     *
+     * A null or empty list will lead to default bootstrap "127.0.0.1" being used.
+     *
+     * @param bootstrapNodes the list of connection Strings to the underlying cluster.
+     */
+    public void setBootstrap(List<String> bootstrapNodes) {
+        if (bootstrapNodes == null || bootstrapNodes.isEmpty()) {
+            //value of null is interpreted as defaulting to localhost
+            this.bootstrap = Collections.singletonList(DEFAULT_BOOTSTRAP);
+        } else {
+            this.bootstrap = bootstrapNodes;
+        }
+    }
+
+    /**
+     * Set the bootstrap list used to initiate a connection to the underlying cluster.
+     * It will be used by any {@link CouchbaseCacheManager} created after this point.
+     *
+     * A null or empty list will lead to default bootstrap "127.0.0.1" being used.
+     *
+     * @param bootstrapNodes the list of connection Strings to the underlying cluster.
+     */
+    public void setBootstrap(String... bootstrapNodes) {
+        this.setBootstrap(Arrays.asList(bootstrapNodes));
     }
 
     @Override
