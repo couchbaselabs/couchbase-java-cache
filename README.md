@@ -5,8 +5,15 @@ This is a work in progress JCache implementation for the Couchbase Java SDK 2.0.
 
 See JSR-107 [specification](https://docs.google.com/document/d/1MZQstO9GJo_MUMy5iD5sxCrstunnQ1f85ekCng8LcqM/edit?usp=sharing), [api](https://github.com/jsr107/jsr107spec) and [reference implementation](https://github.com/jsr107/RI).
 
-Basic operations are implemented for now, there's limited tracking of statistics but no support for listeners nor for EntryProcessors.
-Expiration is managed by the underlying couchbase bucket.
+Basic operations are implemented for now.
+
+## What's partially there / missing
+ * Limited tracking of statistics
+ * Expiration is managed by the underlying couchbase bucket
+ * No support for listeners
+ * No support for EntryProcessors
+ * No locking, so the "atomic operations" of the specification should not yet be considered as such
+ * For now, write-through is not implemented and read-through is only implemented in Get
 
 ## How to use
 The CouchbaseCacheManager keeps a reference to a Couchbase Cluster under the wire. It will create Caches mapped to Couchbase Buckets.
