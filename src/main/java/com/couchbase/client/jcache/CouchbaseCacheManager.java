@@ -25,6 +25,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import javax.cache.Cache;
+import javax.cache.CacheException;
 import javax.cache.CacheManager;
 import javax.cache.configuration.CompleteConfiguration;
 import javax.cache.configuration.Configuration;
@@ -132,7 +133,7 @@ public class CouchbaseCacheManager implements CacheManager {
 
         synchronized (caches) {
             if (caches.containsKey(cacheName)) {
-                throw new IllegalArgumentException("Cache " + cacheName + " already exist");
+                throw new CacheException("Cache " + cacheName + " already exist");
             } else {
                 CouchbaseCache<K, V> cache = new CouchbaseCache<K, V>(this, couchbaseConfiguration);
                 caches.put(cacheName, cache);
