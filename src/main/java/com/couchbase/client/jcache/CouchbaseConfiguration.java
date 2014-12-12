@@ -154,8 +154,16 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
      *
      * @param name the name of the cache to be created via the produced configuration.
      * @return a new builder.
+     * @throws NullPointerException if the given cache name is null
+     * @throws IllegalArgumentException if the given cache name is empty
      */
     public static <K, V> Builder<K, V> builder(String name) {
+        if (name == null) {
+            throw new NullPointerException("Null cache name not allowed");
+        }
+        if (name.isEmpty()) {
+            throw new IllegalArgumentException("Empty cache name not allowed");
+        }
         return new Builder(name);
     }
 
