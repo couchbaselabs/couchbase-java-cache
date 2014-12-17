@@ -135,6 +135,7 @@ artifacts {
 }
 
 def pomConfig = {
+    name 'Couchbase JCache Implementation'
     url 'http://couchbase.com'
     organization {
         name 'Couchbase, Inc.'
@@ -187,10 +188,9 @@ publishing  {
                 def root = asNode()
                 root.dependencies.'*'.findAll() {
                     it.scope*.value = 'compile'
-                    if (it.artifactId.text() != 'java-client') {
-                        it.appendNode('optional', 'true')
-                    }
                 }
+                // For some weird reason description does not work in pomConfig, so doing it manually here.
+                root.appendNode('Official Couchbase JCache Implementation')
                 root.children().last() + pomConfig
             }
         }
