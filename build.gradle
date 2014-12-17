@@ -186,11 +186,8 @@ publishing  {
 
             pom.withXml {
                 def root = asNode()
-                root.dependencies.'*'.findAll() {
-                    it.scope*.value = 'compile'
-                }
                 // For some weird reason description does not work in pomConfig, so doing it manually here.
-                root.appendNode('Official Couchbase JCache Implementation')
+                root.appendNode('description', 'Official Couchbase JCache Implementation')
                 root.children().last() + pomConfig
             }
         }
