@@ -17,6 +17,7 @@ import org.apache.tools.ant.filters.ReplaceTokens
 apply plugin: 'java'
 apply plugin: 'eclipse'
 apply plugin: 'idea'
+apply plugin: 'maven'
 apply plugin: 'maven-publish'
 apply plugin: 'checkstyle'
 
@@ -70,7 +71,7 @@ configurations {
 
 
 dependencies {
-    compile group: 'com.couchbase.client', name: 'java-client', version: clientVersion, changing: true
+    compile group: 'com.couchbase.client', name: 'java-client', version: sdkVersion, changing: true
     compile group: 'javax.cache', name: 'cache-api', version: cacheApiVersion
     testCompile group: 'junit', name: 'junit', version: junitVersion
 
