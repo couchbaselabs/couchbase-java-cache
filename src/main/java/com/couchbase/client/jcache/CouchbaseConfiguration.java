@@ -272,8 +272,8 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         }
 
         /**
-         * Indicates that the views that can enumerate the content of
-         * each cache are found under design document <i>designDoc</i>,
+         * Indicates that the view that can enumerate the content of
+         * this cache is found under design document <i>designDoc</i>,
          * view <i>viewName</i>.
          *
          * Defaults to {@link CouchbaseConfiguration#DEFAULT_VIEWALL_DESIGNDOC}
@@ -290,16 +290,30 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         }
 
         /**
-         * Indicates that the views that can enumerate the content of
-         * each cache are found under design document <i>designDoc</i>.
+         * Indicates that the view that can enumerate the content of
+         * this cache is found under design document <i>designDoc</i>.
          *
-         * Keeps the view name's default, which is the cacheName.
+         * Keeps the current view name (which is the cacheName by default).
          *
          * @param designDoc the name of the design document
          * @return this {@link Builder} for chaining calls
          */
         public Builder viewAllDesignDoc(String designDoc) {
             return this.viewAll(designDoc, this.viewAllViewName);
+        }
+
+        /**
+         * Indicates that the view that can enumerate the content of
+         * this cache is found under name <i>viewName</i>.
+         *
+         * Keeps the current view design document (which is
+         * {@link CouchbaseConfiguration#DEFAULT_VIEWALL_DESIGNDOC} by default).
+         *
+         * @param viewName the name of the view
+         * @return this {@link Builder} for chaining calls
+         */
+        public Builder viewAllName(String viewName) {
+            return this.viewAll(this.viewAllDesignDoc, viewName);
         }
 
         /**
