@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -151,7 +152,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     }
 
     /**
-     * Allows to enable/disable managemnet via JMX.
+     * Allows to enable/disable management via JMX.
      * This will also update the configuration.
      *
      * @param enabled the enabled flag value
@@ -235,9 +236,6 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public boolean containsKey(K key) {
         checkOpen();
-
-        //TODO locks, maybe expiry
-
         return bucket.get(toInternalKey(key), SerializableDocument.class) != null;
     }
 
@@ -253,6 +251,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         //TODO locks, check expiry
         checkOpen();
         checkTypes(key, value);
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
 
         try {
             SerializableDocument doc = createDocument(key, value, Operation.CREATION);
@@ -261,6 +260,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 bucket.upsert(doc);
                 if (configuration.isStatisticsEnabled()) {
                     statisticsMxBean.increaseCachePuts(1L);
+                    statisticsMxBean.addPutTimeNano(System.nanoTime() - start);
                 }
             }
         } catch (Exception e) {
@@ -271,26 +271,29 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public V getAndPut(K key, V value) {
-        //TODO locks, double check statistics, expiry
+        //TODO locks, expiry
         checkOpen();
         checkTypes(key, value);
+
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
 
         String internalKey = toInternalKey(key);
         SerializableDocument oldValue = bucket.get(internalKey, SerializableDocument.class);
 
         put(key, value);
-
-        if (oldValue == null) {
-            if (configuration.isStatisticsEnabled()) {
+        if (configuration.isStatisticsEnabled()) {
+            statisticsMxBean.increaseCachePuts(1L);
+            if (oldValue == null) {
                 statisticsMxBean.increaseCacheMisses(1L);
-            }
-            return null;
-        } else {
-            if (configuration.isStatisticsEnabled()) {
+            } else {
                 statisticsMxBean.increaseCacheHits(1L);
             }
-            return (V) oldValue.content();
+            long time = System.nanoTime() - start;
+            statisticsMxBean.addGetTimeNano(time);
+            statisticsMxBean.addPutTimeNano(time);
         }
+
+        return oldValue == null ? null : (V) oldValue.content();
     }
 
     @Override
@@ -307,6 +310,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         checkOpen();
         checkTypes(key, value);
         String internalKey = toInternalKey(key);
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
 
         SerializableDocument oldDoc = bucket.get(internalKey, SerializableDocument.class);
         if (oldDoc != null) {
@@ -324,6 +328,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                     bucket.insert(newDoc);
                     if (isStatisticsEnabled()) {
                         statisticsMxBean.increaseCachePuts(1L);
+                        statisticsMxBean.addPutTimeNano(System.nanoTime() - start);
                     }
                     return true;
                 } else {
@@ -343,6 +348,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             throw new NullPointerException("Removed key cannot be null");
         }
         String internalKey = toInternalKey(key);
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
+
         SerializableDocument oldDoc = bucket.getAndLock(internalKey, 10, SerializableDocument.class);
         if (oldDoc == null) {
             return false;
@@ -350,6 +357,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             bucket.remove(oldDoc);
             if (isStatisticsEnabled()) {
                 statisticsMxBean.increaseCacheRemovals(1L);
+                statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
             }
             return true;
         }
@@ -359,15 +367,33 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public boolean remove(K key, V oldValue) {
         checkOpen();
         String cbKey = toInternalKey(key);
-        //TODO lock, expiry and stats
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
+        //TODO lock, expiry
 
         V currentValue = internalGet(cbKey);
+        boolean result;
+
         if (currentValue == null || !currentValue.equals(oldValue)) {
-            return false;
+            result = false;
         } else {
             bucket.remove(cbKey, SerializableDocument.class);
-            return true;
+            result = true;
         }
+
+        if (configuration.isStatisticsEnabled()) {
+            long time = System.nanoTime() - start;
+            if (currentValue == null) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            } else {
+                statisticsMxBean.increaseCacheHits(1L);
+                if (result) {
+                    statisticsMxBean.increaseCacheRemovals(1L);
+                    statisticsMxBean.addRemoveTimeNano(time);
+                }
+            }
+            statisticsMxBean.addGetTimeNano(time);
+        }
+        return result;
     }
 
     @Override
@@ -375,14 +401,26 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         checkOpen();
         String cbKey = toInternalKey(key);
 
-        //TODO locks, expiry and stats
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
+
+        //TODO locks (atomic), expiry
         V currentValue = internalGet(cbKey);
-        if (currentValue == null) {
-            return null;
-        } else {
+        if (currentValue != null) {
             bucket.remove(cbKey, SerializableDocument.class);
-            return currentValue;
         }
+
+        if (configuration.isStatisticsEnabled()) {
+            if (currentValue == null) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            } else {
+                statisticsMxBean.increaseCacheRemovals(1L);
+                statisticsMxBean.increaseCacheHits(1L);
+                statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
+            }
+            statisticsMxBean.addGetTimeNano(System.nanoTime() - start);
+        }
+
+        return currentValue;
     }
 
     @Override
@@ -395,30 +433,66 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         if (newValue == null) {
             throw new NullPointerException("NewValue must not be null for key " + key);
         }
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0L;
 
-        //TODO locks, expiry and stats
+        //TODO locks, expiry
+        boolean result;
         V currentValue = internalGet(cbKey);
         if (currentValue != null && currentValue.equals(oldValue)) {
             internalPut(cbKey, newValue);
-            return true;
+            result = true;
         } else {
-            return false;
+            result = false;
         }
+
+        if (configuration.isStatisticsEnabled()) {
+            long time = System.nanoTime() - start;
+            statisticsMxBean.addGetTimeNano(time);
+            if (currentValue == null) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            } else {
+                statisticsMxBean.increaseCacheHits(1L);
+            }
+
+            if (result) {
+                statisticsMxBean.increaseCachePuts(1L);
+                statisticsMxBean.addPutTimeNano(time);
+            }
+        }
+
+        return result;
     }
 
     @Override
     public boolean replace(K key, V value) {
         checkOpen();
         String cbKey = toInternalKey(key);
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0L;
 
-        //TODO locks, expiry and stats
+        //TODO locks, expiry
+        boolean result;
         V oldValue = internalGet(cbKey);
         if (oldValue == null) {
-            return false;
+            result = false;
         } else {
             internalPut(cbKey, value);
-            return true;
+            result = true;
         }
+
+        if (configuration.isStatisticsEnabled()) {
+            long time = System.nanoTime() - start;
+            statisticsMxBean.addGetTimeNano(time);
+            if (result) {
+                statisticsMxBean.addPutTimeNano(time);
+                statisticsMxBean.increaseCachePuts(1L);
+                statisticsMxBean.increaseCacheHits(1L);
+            } else {
+                statisticsMxBean.increaseCacheMisses(1L);
+            }
+
+        }
+
+        return result;
     }
 
     @Override
@@ -426,14 +500,27 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         checkOpen();
         String cbKey = toInternalKey(key);
 
-        //TODO locks, expiry and stats
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
+        //TODO locks, expiry
+
         V oldValue = internalGet(cbKey);
         if (oldValue != null) {
             internalPut(cbKey, value);
-            return oldValue;
-        } else {
-            return null;
         }
+
+        if (configuration.isStatisticsEnabled()) {
+            long time = System.nanoTime() - start;
+            if (oldValue == null) {
+                statisticsMxBean.increaseCacheMisses(1L);
+            } else {
+                statisticsMxBean.increaseCacheHits(1L);
+                statisticsMxBean.increaseCachePuts(1L);
+                statisticsMxBean.addPutTimeNano(time);
+            }
+            statisticsMxBean.addGetTimeNano(time);
+        }
+
+        return oldValue;
     }
 
     @Override
@@ -450,18 +537,28 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public void removeAll() {
         checkOpen();
+        long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
+
+        final AtomicLong removedCount = new AtomicLong(0L);
         internalClear(new Action1<SerializableDocument>() {
-                    @Override
-                    public void call(SerializableDocument serializableDocument) {
-                        //TODO notify CacheEntryRemovedListeners here
-                    }
-                });
+            @Override
+            public void call(SerializableDocument serializableDocument) {
+                //TODO notify CacheEntryRemovedListeners here
+            }
+        });
+
+        if (configuration.isStatisticsEnabled() && removedCount.get() > 0L) {
+            statisticsMxBean.increaseCacheRemovals(removedCount.get());
+            //approximate remove time as an average
+            statisticsMxBean.addRemoveTimeNano((System.nanoTime() - start) / removedCount.get());
+        }
     }
 
     @Override
     public <T> T invoke(K key, EntryProcessor<K, V, T> entryProcessor,
             Object... arguments) throws EntryProcessorException {
         checkOpen();
+        //TODO stats: puts if setValue called, removals if remove called, hits and misses
 
         throw new UnsupportedOperationException();
     }
@@ -470,6 +567,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public <T> Map<K, EntryProcessorResult<T>> invokeAll(Set<? extends K> keys, EntryProcessor<K, V, T> entryProcessor,
             Object... arguments) {
         checkOpen();
+        //TODO stats, per key: puts if setValue called, removals if remove called, hits and misses
 
         throw new UnsupportedOperationException();
     }
@@ -488,6 +586,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public Iterator<Entry<K, V>> iterator() {
         checkOpen();
 
+        //TODO redo the iterator, implement a custom one (with remove() and associated stats?)
+
         return getAllKeys()
                 .flatMap(new Func1<String, Observable<SerializableDocument>>() {
                     @Override
@@ -498,6 +598,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 .map(new Func1<SerializableDocument, Entry<K, V>>() {
                     @Override
                     public Entry<K, V> call(SerializableDocument serializableDocument) {
+                        //FIXME this should expose the K domain key, not internal String id
                         return new CouchbaseCacheEntry(serializableDocument.id(), serializableDocument.content());
                     }
                 })
