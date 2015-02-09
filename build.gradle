@@ -51,7 +51,7 @@ def getVersionName() {
 }
 
 ext {
-    sdkVersion = '2.0.2'
+    sdkVersion = '2.1.0'
     junitVersion = '4.11'
     cacheApiVersion = '1.0.0'
 
