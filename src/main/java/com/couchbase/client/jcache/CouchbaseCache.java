@@ -80,6 +80,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     private final CacheWriter<K, V> cacheWriter;
     private final CouchbaseCacheMxBean cacheMxBean;
     private final CouchbaseStatisticsMxBean statisticsMxBean;
+    private final CacheEventManager eventManager;
 
     private volatile boolean isClosed;
 
@@ -120,6 +121,11 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         }
         if (configuration.isStatisticsEnabled()) {
             setStatisticsEnabled(true);
+        }
+
+        this.eventManager = new CacheEventManager<K, V>();
+        for (CacheEntryListenerConfiguration config : configuration.getCacheEntryListenerConfigurations()) {
+            this.eventManager.addListener(config);
         }
 
         this.keyPrefix = configuration.getCachePrefix() == null ? "" : configuration.getCachePrefix();
@@ -573,13 +579,17 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     }
 
     @Override
-    public void registerCacheEntryListener(CacheEntryListenerConfiguration<K, V> cacheEntryListenerConfiguration) {
-        throw new UnsupportedOperationException();
+    public void registerCacheEntryListener(CacheEntryListenerConfiguration<K, V> config) {
+        //keep track of this in the configuration in case it is cloned for another cache
+        this.configuration.addCacheEntryListenerConfiguration(config);
+        //instantiate the listener in the dispatcher
+        this.eventManager.addListener(config);
     }
 
     @Override
-    public void deregisterCacheEntryListener(CacheEntryListenerConfiguration<K, V> cacheEntryListenerConfiguration) {
-        throw new UnsupportedOperationException();
+    public void deregisterCacheEntryListener(CacheEntryListenerConfiguration<K, V> config) {
+        this.eventManager.removeListener(config);
+        this.configuration.removeCacheEntryListenerConfiguration(config);
     }
 
     @Override
