@@ -30,28 +30,34 @@ public class CouchbaseConfigurationTest {
 
     @Test(expected = NullPointerException.class)
     public void shouldNullPointerOnNullCacheName() {
-        CouchbaseConfiguration.builder(null).build();
+        CouchbaseConfiguration.builder(null, KeyConverter.STRING_KEY_CONVERTER).build();
+    }
+
+    @Test(expected = NullPointerException.class)
+    public void shouldNullPointerOnNullKeyConverter() {
+        CouchbaseConfiguration.builder("test", null);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void shouldIllegalArgumentOnEmptyCacheName() {
-        CouchbaseConfiguration.builder("").build();
+        CouchbaseConfiguration.builder("", KeyConverter.STRING_KEY_CONVERTER).build();
     }
 
     @Test
     public void shouldHaveSaneDefaults() {
-        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE).build();
+        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE, KeyConverter.STRING_KEY_CONVERTER).build();
 
         assertEquals(CouchbaseConfiguration.DEFAULT_BUCKET_NAME, conf.getBucketName());
         assertEquals(CouchbaseConfiguration.DEFAULT_BUCKET_PASSWORD, conf.getBucketPassword());
         assertEquals(CACHE + "_", conf.getCachePrefix());
         assertEquals(CouchbaseConfiguration.DEFAULT_VIEWALL_DESIGNDOC, conf.getAllViewDesignDoc());
         assertEquals(CACHE, conf.getAllViewName());
+        assertEquals(KeyConverter.STRING_KEY_CONVERTER, conf.getKeyConverter());
     }
 
     @Test
     public void shouldHaveEmptyPrefixIfDedicatedBucket() {
-        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE)
+        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE, KeyConverter.STRING_KEY_CONVERTER)
                 .withPrefix("ignored")
                 .useDedicatedBucket("toto", "")
                 .build();
@@ -61,7 +67,7 @@ public class CouchbaseConfigurationTest {
 
     @Test
     public void shouldHaveNameAsDefaultPrefixIfSharedBucket() {
-        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE)
+        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE, KeyConverter.STRING_KEY_CONVERTER)
                 .useSharedBucket("toto", "")
                 .build();
 
@@ -71,7 +77,7 @@ public class CouchbaseConfigurationTest {
 
     @Test
     public void shouldHaveCustomPrefixIfSharedBucketAndPrefixSet() {
-        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE)
+        CouchbaseConfiguration conf = CouchbaseConfiguration.builder(CACHE, KeyConverter.STRING_KEY_CONVERTER)
                 .useSharedBucket("toto", "")
                 .withPrefix("tata")
                 .build();

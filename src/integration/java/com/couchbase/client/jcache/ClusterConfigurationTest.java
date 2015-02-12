@@ -16,10 +16,12 @@ package com.couchbase.client.jcache;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.util.concurrent.TimeoutException;
 
+import com.couchbase.client.deps.io.netty.util.Timeout;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
 import com.couchbase.client.jcache.spi.CouchbaseCachingProvider;
 import org.junit.Test;
@@ -46,7 +48,7 @@ public class ClusterConfigurationTest {
         }
     }
 
-    @Test(expected = TimeoutException.class)
+    @Test
     public void shouldNotConnectToBadCustomCluster() {
         final String badIp = "192.168.123.123";
         CouchbaseCachingProvider defaultProvider = new CouchbaseCachingProvider();
@@ -60,6 +62,9 @@ public class ClusterConfigurationTest {
             CouchbaseCacheManager manager = (CouchbaseCacheManager) defaultProvider.getCacheManager();
             manager.cluster.openBucket();
             fail();
+        } catch (RuntimeException e) {
+            assertNotNull(e.getCause());
+            assertTrue(e.getCause() instanceof TimeoutException);
         } finally {
             defaultProvider.close();
         }

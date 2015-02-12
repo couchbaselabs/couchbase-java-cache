@@ -50,14 +50,16 @@ public class BasicCacheIntegrationTest {
         cacheManager = (CouchbaseCacheManager) cachingProvider.getCacheManager();
 
         //here we create a dedicated cache for most of the tests
-        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>("dedicatedCache")
+        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>(
+                "dedicatedCache", KeyConverter.STRING_KEY_CONVERTER)
                 .build();
         dedicatedCache = (CouchbaseCache<String, String>) cacheManager.createCache("dedicatedCache", cbConfig);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void shouldRefuseToBuildCacheWithIncoherentNameInConfig() {
-        cacheManager.createCache("toto", CouchbaseConfiguration.builder("tata").build());
+        cacheManager.createCache("toto", CouchbaseConfiguration.builder("tata", KeyConverter.STRING_KEY_CONVERTER)
+                                                               .build());
     }
 
     @Test
@@ -66,7 +68,8 @@ public class BasicCacheIntegrationTest {
         final String prefixKey = "prefix_";
         final String realKey = prefixKey +  "test";
 
-        CouchbaseConfiguration<String, String> cbConfig = CouchbaseConfiguration.builder(cacheName)
+        CouchbaseConfiguration<String, String> cbConfig = CouchbaseConfiguration
+                .builder(cacheName, KeyConverter.STRING_KEY_CONVERTER)
                 .defaultBase()
                 .useDefaultSharedBucket()
                 .withPrefix(prefixKey)
@@ -95,7 +98,8 @@ public class BasicCacheIntegrationTest {
         final String cacheName = "cacheB";
         final String bucketName = "default";
         final String key = "shouldPersistInDedicatedBucketWithoutPrefix";
-        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>(cacheName)
+        CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration
+                .Builder<String, String>(cacheName, KeyConverter.STRING_KEY_CONVERTER)
                 .defaultBase()
                 .useDedicatedBucket(bucketName, "")
                 .build();

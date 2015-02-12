@@ -30,12 +30,13 @@ import com.couchbase.client.java.Bucket;
  */
 public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> implements Serializable {
 
-    public static final long serialVersionUID = 1L;
+    public static final long serialVersionUID = 2L;
 
     public static final String DEFAULT_BUCKET_NAME = "jcache";
     public static final String DEFAULT_BUCKET_PASSWORD = "jcache";
     public static final String DEFAULT_VIEWALL_DESIGNDOC = "jcache";
 
+    private final KeyConverter<K> keyConverter;
     private final String bucketName;
     private final String bucketPassword;
     private final String cachePrefix;
@@ -43,11 +44,12 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     private final String viewAllViewName;
     private final String cacheName;
 
-    private CouchbaseConfiguration(String cacheName, CompleteConfiguration<K, V> configuration,
-            String bucketName, String bucketPassword, String cachePrefix,
+    private CouchbaseConfiguration(String cacheName, KeyConverter<K> keyConverter,
+            CompleteConfiguration<K, V> configuration, String bucketName, String bucketPassword, String cachePrefix,
             String viewAllDesignDoc, String viewAllViewName) {
         super(configuration);
         this.cacheName = cacheName;
+        this.keyConverter = keyConverter;
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
@@ -55,10 +57,12 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         this.viewAllViewName = viewAllViewName;
     }
 
-    private CouchbaseConfiguration(String cacheName, String bucketName, String bucketPassword,
-            String cachePrefix, String viewAllDesignDoc, String viewAllViewName) {
+    private CouchbaseConfiguration(String cacheName, KeyConverter<K> keyConverter,
+            String bucketName, String bucketPassword, String cachePrefix,
+            String viewAllDesignDoc, String viewAllViewName) {
         super();
         this.cacheName = cacheName;
+        this.keyConverter = keyConverter;
         this.bucketName = bucketName;
         this.bucketPassword = bucketPassword;
         this.cachePrefix = cachePrefix;
@@ -74,6 +78,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
     /*package*/ CouchbaseConfiguration(CouchbaseConfiguration<K, V> configuration) {
         super(configuration);
         this.cacheName = configuration.getCacheName();
+        this.keyConverter = configuration.getKeyConverter();
         this.bucketName = configuration.bucketName;
         this.bucketPassword = configuration.bucketPassword;
         this.cachePrefix = configuration.cachePrefix;
@@ -86,6 +91,13 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
      */
     public String getBucketName() {
         return bucketName;
+    }
+
+    /**
+     * Returns the {@link KeyConverter} used to convert keys to/from internal couchbase representation.
+     */
+    public KeyConverter<K> getKeyConverter() {
+        return this.keyConverter;
     }
 
     /**
@@ -152,18 +164,19 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
      * the name of the cache for the view.
      *
      * @param name the name of the cache to be created via the produced configuration.
+     * @param keyConverter the {@link KeyConverter} to use to convert keys to internal couchbase format and back.
      * @return a new builder.
      * @throws NullPointerException if the given cache name is null
      * @throws IllegalArgumentException if the given cache name is empty
      */
-    public static <K, V> Builder<K, V> builder(String name) {
-        if (name == null) {
-            throw new NullPointerException("Null cache name not allowed");
+    public static <K, V> Builder<K, V> builder(String name, KeyConverter<K> keyConverter) {
+        if (name == null || keyConverter == null) {
+            throw new NullPointerException("Null cache name or keyConverter not allowed");
         }
         if (name.isEmpty()) {
             throw new IllegalArgumentException("Empty cache name not allowed");
         }
-        return new Builder(name);
+        return new Builder(name, keyConverter);
     }
 
     /**
@@ -173,14 +186,16 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
 
         private CompleteConfiguration<K, V> base;
         private String bucketName;
+        private KeyConverter<K> keyConverter;
         private String bucketPassword;
         private String cachePrefix;
         private String viewAllDesignDoc;
         private String viewAllViewName;
         private final String cacheName;
 
-        protected Builder(String cacheName) {
+        protected Builder(String cacheName, KeyConverter<K> keyConverter) {
             this.cacheName = cacheName;
+            this.keyConverter = keyConverter;
             this.bucketName = CouchbaseConfiguration.DEFAULT_BUCKET_NAME;
             this.bucketPassword = CouchbaseConfiguration.DEFAULT_BUCKET_PASSWORD;
             this.cachePrefix = cacheName + "_";
@@ -328,11 +343,11 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
             }
 
             if (base == null) {
-                config = new CouchbaseConfiguration<K, V>(cacheName, bucketName, bucketPassword, cachePrefix,
-                        viewAllDesignDoc, viewAllViewName);
+                config = new CouchbaseConfiguration<K, V>(cacheName, keyConverter, bucketName, bucketPassword,
+                        cachePrefix, viewAllDesignDoc, viewAllViewName);
             } else {
-                config = new CouchbaseConfiguration<K, V>(cacheName, base, bucketName, bucketPassword, cachePrefix,
-                        viewAllDesignDoc, viewAllViewName);
+                config = new CouchbaseConfiguration<K, V>(cacheName, keyConverter, base, bucketName, bucketPassword,
+                        cachePrefix, viewAllDesignDoc, viewAllViewName);
             }
             return config;
         }
