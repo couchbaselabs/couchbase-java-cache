@@ -29,11 +29,14 @@ import javax.cache.event.CacheEntryListener;
 import javax.cache.event.CacheEntryListenerException;
 import javax.cache.event.CacheEntryRemovedListener;
 import javax.cache.event.CacheEntryUpdatedListener;
+import javax.cache.event.EventType;
 
 /**
  * This class manages registration of event listeners (through their {@link CacheEntryListenerConfiguration}). It also
  * manages dispatching of events. First events are queued using {@link #queueEvent(CacheEntryEvent)}. Once all events
  * have been prepared, {@link #dispatch()} is called to notify the adequate listeners.
+ * <p>
+ * The event concrete class for this implementation is {@link CouchbaseCacheEntryEvent}.
  *
  * @author Simon Baslé
  * @since 1.0
@@ -169,6 +172,21 @@ public class CacheEventManager<K, V> {
                 throw new CacheEntryListenerException("Exception on listener execution", e);
             }
         }
+    }
+
+    /**
+     * Utility method to create a {@link CouchbaseCacheEntryEvent}, {@link #queueEvent(CacheEntryEvent) queue} it and
+     * {@link #dispatch() dispatch} it one call.
+     *
+     * @param type the type of the event to create.
+     * @param key the key impacted by the event.
+     * @param value the value corresponding to the key after the event.
+     * @param oldValueOrNull the old value before the event or null if not applicable.
+     * @param source the cache in which the event happened.
+     */
+    public void queueAndDispatch(EventType type, K key, V value, V oldValueOrNull, CouchbaseCache source) {
+        queueEvent(new CouchbaseCacheEntryEvent<K, V>(type, key, value, oldValueOrNull, source));
+        dispatch();
     }
 
     /**
