@@ -29,6 +29,7 @@ import javax.cache.CacheException;
 import javax.cache.CacheManager;
 import javax.cache.configuration.CacheEntryListenerConfiguration;
 import javax.cache.configuration.Configuration;
+import javax.cache.event.EventType;
 import javax.cache.expiry.Duration;
 import javax.cache.expiry.ExpiryPolicy;
 import javax.cache.integration.CacheLoader;
@@ -56,7 +57,7 @@ import rx.functions.Actions;
 import rx.functions.Func1;
 
 /**
- * The Couchbase implementation of a @{link Cache}.
+ * The Couchbase implementation of a @{link Cache}. Note that type V must be {@link Serializable}!
  *
  * @author Simon Baslé
  * @since 1.0
@@ -193,12 +194,14 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
         SerializableDocument doc = bucket.get(cbKey, SerializableDocument.class);
         if(doc != null) {
+            //when an entry is found, just update its expiry if ACCESS warrants it
             if (isStatisticsEnabled()) {
                 statisticsMxBean.increaseCacheHits(1L);
             }
             touchIfNeeded(cbKey);
             result = (V) doc.content();
         } else {
+            //no entry found, still try to apply read-through
             if (isStatisticsEnabled()) {
                 statisticsMxBean.increaseCacheMisses(1L);
             }
@@ -207,6 +210,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 if (loaded != null && (doc = createDocument(key, loaded, Operation.CREATION)) != null) {
                     bucket.insert(doc);
                     result = loaded;
+                    //a successful read-through triggers a CREATED notification
+                    eventManager.queueAndDispatch(EventType.CREATED, key, loaded, null, this);
                 }
             }
         }
@@ -251,6 +256,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public void loadAll(Set<? extends K> keys, boolean replaceExistingValues, CompletionListener completionListener) {
         checkOpen();
         //TODO implement
+        //TODO should dispatch CREATED for each missing key, UPDATED for each replaced value
         throw new UnsupportedOperationException();
     }
 
@@ -262,10 +268,16 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
 
         try {
+            SerializableDocument oldDocument = bucket.get(toInternalKey(key), SerializableDocument.class);
             SerializableDocument doc = createDocument(key, value, Operation.CREATION);
             //Only do something if doc is not null (otherwise it means expiry was already set)
             if (doc != null) {
                 bucket.upsert(doc);
+                if (oldDocument != null) {
+                    eventManager.queueAndDispatch(EventType.UPDATED, key, value, (V) oldDocument.content(), this);
+                } else {
+                    eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
+                }
                 if (configuration.isStatisticsEnabled()) {
                     statisticsMxBean.increaseCachePuts(1L);
                     statisticsMxBean.addPutTimeNano(System.nanoTime() - start);
@@ -301,7 +313,14 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             statisticsMxBean.addPutTimeNano(time);
         }
 
-        return oldValue == null ? null : (V) oldValue.content();
+        if (oldValue == null) {
+            eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
+            return null;
+        } else {
+            V old = (V) oldValue.content();
+            eventManager.queueAndDispatch(EventType.UPDATED, key, value, old, this);
+            return old;
+        }
     }
 
     @Override
@@ -334,6 +353,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 SerializableDocument newDoc = createDocument(key, value, Operation.CREATION, oldDoc.cas());
                 if (newDoc != null) {
                     bucket.insert(newDoc);
+                    eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
                     if (isStatisticsEnabled()) {
                         statisticsMxBean.increaseCachePuts(1L);
                         statisticsMxBean.addPutTimeNano(System.nanoTime() - start);
@@ -363,6 +383,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             return false;
         } else {
             bucket.remove(oldDoc);
+            eventManager.queueAndDispatch(EventType.REMOVED, key, (V) oldDoc.content(), null, this);
             if (isStatisticsEnabled()) {
                 statisticsMxBean.increaseCacheRemovals(1L);
                 statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
@@ -385,6 +406,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             result = false;
         } else {
             bucket.remove(cbKey, SerializableDocument.class);
+            eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
             result = true;
         }
 
@@ -415,6 +437,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         V currentValue = internalGet(cbKey);
         if (currentValue != null) {
             bucket.remove(cbKey, SerializableDocument.class);
+            eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
         }
 
         if (configuration.isStatisticsEnabled()) {
@@ -448,6 +471,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         V currentValue = internalGet(cbKey);
         if (currentValue != null && currentValue.equals(oldValue)) {
             internalPut(cbKey, newValue);
+            eventManager.queueAndDispatch(EventType.UPDATED, key, newValue, currentValue, this);
             result = true;
         } else {
             result = false;
@@ -484,6 +508,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             result = false;
         } else {
             internalPut(cbKey, value);
+            eventManager.queueAndDispatch(EventType.UPDATED, key, value, oldValue, this);
             result = true;
         }
 
@@ -514,6 +539,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         V oldValue = internalGet(cbKey);
         if (oldValue != null) {
             internalPut(cbKey, value);
+            eventManager.queueAndDispatch(EventType.UPDATED, key, value, oldValue, this);
         }
 
         if (configuration.isStatisticsEnabled()) {
@@ -551,9 +577,13 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         internalClear(new Action1<SerializableDocument>() {
             @Override
             public void call(SerializableDocument serializableDocument) {
-                //TODO notify CacheEntryRemovedListeners here
+                K key = fromInternalKey(serializableDocument.id());
+                V value = (V) serializableDocument.content();
+                eventManager.queueEvent(new CouchbaseCacheEntryEvent(EventType.REMOVED, key, value,
+                        null, CouchbaseCache.this));
             }
         });
+        eventManager.dispatch();
 
         if (configuration.isStatisticsEnabled() && removedCount.get() > 0L) {
             statisticsMxBean.increaseCacheRemovals(removedCount.get());
@@ -567,6 +597,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             Object... arguments) throws EntryProcessorException {
         checkOpen();
         //TODO stats: puts if setValue called, removals if remove called, hits and misses
+        //TODO dispatch correct events
 
         throw new UnsupportedOperationException();
     }
@@ -576,6 +607,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             Object... arguments) {
         checkOpen();
         //TODO stats, per key: puts if setValue called, removals if remove called, hits and misses
+        //TODO dispatch correct events
 
         throw new UnsupportedOperationException();
     }
@@ -598,7 +630,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public Iterator<Entry<K, V>> iterator() {
         checkOpen();
 
-        //TODO redo the iterator, implement a custom one (with remove() and associated stats?)
+        //TODO redo the iterator, implement a custom one (with remove() and associated stats/event?)
 
         return getAllKeys()
                 .flatMap(new Func1<String, Observable<SerializableDocument>>() {
