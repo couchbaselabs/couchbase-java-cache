@@ -43,6 +43,9 @@ import com.couchbase.client.core.logging.CouchbaseLogger;
 import com.couchbase.client.core.logging.CouchbaseLoggerFactory;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.document.SerializableDocument;
+import com.couchbase.client.java.error.CASMismatchException;
+import com.couchbase.client.java.error.DocumentAlreadyExistsException;
+import com.couchbase.client.java.error.DocumentDoesNotExistException;
 import com.couchbase.client.java.view.AsyncViewResult;
 import com.couchbase.client.java.view.AsyncViewRow;
 import com.couchbase.client.java.view.DesignDocument;
@@ -186,39 +189,47 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public V get(K key) {
-        //TODO locks and expiry
+        //TODO expiry
         checkOpen();
         long start = (isStatisticsEnabled()) ? System.nanoTime() : 0;
         String cbKey = toInternalKey(key);
         V result = null;
 
         SerializableDocument doc = bucket.get(cbKey, SerializableDocument.class);
-        if(doc != null) {
-            //when an entry is found, just update its expiry if ACCESS warrants it
-            if (isStatisticsEnabled()) {
-                statisticsMxBean.increaseCacheHits(1L);
-            }
-            touchIfNeeded(cbKey);
-            result = (V) doc.content();
-        } else {
-            //no entry found, still try to apply read-through
-            if (isStatisticsEnabled()) {
-                statisticsMxBean.increaseCacheMisses(1L);
-            }
-            if (cacheLoader != null && configuration.isReadThrough()) {
-                V loaded = cacheLoader.load(key);
-                if (loaded != null && (doc = createDocument(key, loaded, Operation.CREATION)) != null) {
-                    bucket.insert(doc);
-                    result = loaded;
-                    //a successful read-through triggers a CREATED notification
-                    eventManager.queueAndDispatch(EventType.CREATED, key, loaded, null, this);
+        try {
+            if (doc != null) {
+                //when an entry is found, just update its expiry if ACCESS warrants it
+                if (isStatisticsEnabled()) {
+                    statisticsMxBean.increaseCacheHits(1L);
+                }
+                touchIfNeeded(cbKey);
+                result = (V) doc.content();
+            } else {
+                //no entry found, still try to apply read-through
+                if (isStatisticsEnabled()) {
+                    statisticsMxBean.increaseCacheMisses(1L);
+                }
+                if (cacheLoader != null && configuration.isReadThrough()) {
+                    V loaded = cacheLoader.load(key);
+                    if (loaded != null && (doc = createDocument(key, loaded, Operation.CREATION)) != null) {
+                        try {
+                            bucket.insert(doc);
+                            result = loaded;
+                            //a successful read-through triggers a CREATED notification
+                            eventManager.queueAndDispatch(EventType.CREATED, key, loaded, null, this);
+                        } catch (DocumentAlreadyExistsException e) {
+                            //concurrent creation of document succeeded, abandon loading
+                        }
+                    }
                 }
             }
+            if (isStatisticsEnabled()) {
+                statisticsMxBean.addGetTimeNano(System.nanoTime() - start);
+            }
+            return result;
+        } catch (Exception e) {
+            throw new CacheException("Get " + key + " failed", e);
         }
-        if (isStatisticsEnabled()) {
-            statisticsMxBean.addGetTimeNano(System.nanoTime() - start);
-        }
-        return result;
     }
 
     @Override
@@ -262,7 +273,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public void put(K key, V value) {
-        //TODO locks, check expiry
+        //TODO check expiry
         checkOpen();
         checkTypes(key, value);
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
@@ -291,7 +302,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public V getAndPut(K key, V value) {
-        //TODO locks, expiry
+        //TODO expiry
         checkOpen();
         checkTypes(key, value);
 
@@ -333,7 +344,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public boolean putIfAbsent(K key, V value) {
-        //TODO locks, expiry
+        //TODO expiry
         checkOpen();
         checkTypes(key, value);
         String internalKey = toInternalKey(key);
@@ -346,20 +357,29 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             }
             return false;
         } else {
-            if (isStatisticsEnabled()) {
-                statisticsMxBean.increaseCacheMisses(1L);
-            }
             try {
-                SerializableDocument newDoc = createDocument(key, value, Operation.CREATION, oldDoc.cas());
+                SerializableDocument newDoc = createDocument(key, value, Operation.CREATION);
                 if (newDoc != null) {
-                    bucket.insert(newDoc);
-                    eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
-                    if (isStatisticsEnabled()) {
-                        statisticsMxBean.increaseCachePuts(1L);
-                        statisticsMxBean.addPutTimeNano(System.nanoTime() - start);
+                    try {
+                        bucket.insert(newDoc);
+                        eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
+                        if (isStatisticsEnabled()) {
+                            statisticsMxBean.increaseCacheMisses(1L);
+                            statisticsMxBean.increaseCachePuts(1L);
+                            statisticsMxBean.addPutTimeNano(System.nanoTime() - start);
+                        }
+                        return true;
+                    } catch (DocumentAlreadyExistsException e) {
+                        if (isStatisticsEnabled()) {
+                            statisticsMxBean.increaseCacheHits(1L);
+                        }
+                        return false;
                     }
-                    return true;
                 } else {
+                    //expiry indicates no document to create, assume cache miss
+                    if (isStatisticsEnabled()) {
+                        statisticsMxBean.increaseCacheMisses(1L);
+                    }
                     return false;
                 }
             } catch (Exception e) {
@@ -370,7 +390,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
     @Override
     public boolean remove(K key) {
-        //TODO locks, expiry
+        //TODO expiry
         checkOpen();
         if (key == null) {
             throw new NullPointerException("Removed key cannot be null");
@@ -378,17 +398,25 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         String internalKey = toInternalKey(key);
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
 
-        SerializableDocument oldDoc = bucket.getAndLock(internalKey, 10, SerializableDocument.class);
-        if (oldDoc == null) {
-            return false;
-        } else {
-            bucket.remove(oldDoc);
-            eventManager.queueAndDispatch(EventType.REMOVED, key, (V) oldDoc.content(), null, this);
-            if (isStatisticsEnabled()) {
-                statisticsMxBean.increaseCacheRemovals(1L);
-                statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
+        try {
+            SerializableDocument oldDoc = bucket.get(internalKey, SerializableDocument.class);
+            if (oldDoc == null) {
+                return false;
+            } else {
+                try {
+                    bucket.remove(internalKey); //so that remove ignores cas
+                } catch (DocumentDoesNotExistException e) {
+                    //we consider it a success (another client competed to remove)
+                }
+                eventManager.queueAndDispatch(EventType.REMOVED, key, (V) oldDoc.content(), null, this);
+                if (isStatisticsEnabled()) {
+                    statisticsMxBean.increaseCacheRemovals(1L);
+                    statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
+                }
+                return true;
             }
-            return true;
+        } catch (Exception e) {
+            throw exception("Couldn't remove " + key, e);
         }
     }
 
@@ -397,33 +425,46 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         checkOpen();
         String cbKey = toInternalKey(key);
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
-        //TODO lock, expiry
 
-        V currentValue = internalGet(cbKey);
         boolean result;
+        try {
+            SerializableDocument currentDoc = bucket.get(cbKey, SerializableDocument.class);
+            V currentValue = currentDoc == null ? null : (V) currentDoc.content();
 
-        if (currentValue == null || !currentValue.equals(oldValue)) {
-            result = false;
-        } else {
-            bucket.remove(cbKey, SerializableDocument.class);
-            eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
-            result = true;
-        }
-
-        if (configuration.isStatisticsEnabled()) {
-            long time = System.nanoTime() - start;
-            if (currentValue == null) {
-                statisticsMxBean.increaseCacheMisses(1L);
+            if (currentValue == null || !currentValue.equals(oldValue)) {
+                result = false;
             } else {
-                statisticsMxBean.increaseCacheHits(1L);
-                if (result) {
-                    statisticsMxBean.increaseCacheRemovals(1L);
-                    statisticsMxBean.addRemoveTimeNano(time);
+                try {
+                    bucket.remove(currentDoc);
+                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
+                    result = true;
+                } catch (DocumentDoesNotExistException e) {
+                    //another client competed to remove, still considered a success
+                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
+                    result = true;
+                } catch (CASMismatchException e) {
+                    //the value changed, assume it doesn't correspond anymore
+                    result = false;
                 }
             }
-            statisticsMxBean.addGetTimeNano(time);
+
+            if (configuration.isStatisticsEnabled()) {
+                long time = System.nanoTime() - start;
+                if (currentValue == null) {
+                    statisticsMxBean.increaseCacheMisses(1L);
+                } else {
+                    statisticsMxBean.increaseCacheHits(1L);
+                    if (result) {
+                        statisticsMxBean.increaseCacheRemovals(1L);
+                        statisticsMxBean.addRemoveTimeNano(time);
+                    }
+                }
+                statisticsMxBean.addGetTimeNano(time);
+            }
+            return result;
+        } catch (Exception e) {
+            throw exception("Couldn't remove " + key + " with old value", e);
         }
-        return result;
     }
 
     @Override
@@ -433,25 +474,37 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
 
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
 
-        //TODO locks (atomic), expiry
-        V currentValue = internalGet(cbKey);
-        if (currentValue != null) {
-            bucket.remove(cbKey, SerializableDocument.class);
-            eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
-        }
+        //TODO expiry, better happen-before in case of CAS mismatch
+        try {
+            SerializableDocument currentDoc = bucket.get(cbKey, SerializableDocument.class);
+            V currentValue = null;
 
-        if (configuration.isStatisticsEnabled()) {
-            if (currentValue == null) {
-                statisticsMxBean.increaseCacheMisses(1L);
-            } else {
-                statisticsMxBean.increaseCacheRemovals(1L);
-                statisticsMxBean.increaseCacheHits(1L);
-                statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
+            if (currentDoc != null) {
+                currentValue = (V) currentDoc.content();
+                try {
+                    //still remove and notify with known value even if cas mismatch
+                    bucket.remove(cbKey);
+                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
+                } catch (DocumentDoesNotExistException e) {
+                    currentValue = null;
+                }
             }
-            statisticsMxBean.addGetTimeNano(System.nanoTime() - start);
-        }
 
-        return currentValue;
+            if (configuration.isStatisticsEnabled()) {
+                if (currentValue == null) {
+                    statisticsMxBean.increaseCacheMisses(1L);
+                } else {
+                    statisticsMxBean.increaseCacheRemovals(1L);
+                    statisticsMxBean.increaseCacheHits(1L);
+                    statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
+                }
+                statisticsMxBean.addGetTimeNano(System.nanoTime() - start);
+            }
+
+            return currentValue;
+        } catch (Exception e) {
+            throw exception("Couldn't getAndRemove " + key,  e);
+        }
     }
 
     @Override
@@ -466,66 +519,104 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         }
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0L;
 
-        //TODO locks, expiry
-        boolean result;
-        V currentValue = internalGet(cbKey);
-        if (currentValue != null && currentValue.equals(oldValue)) {
-            internalPut(cbKey, newValue);
-            eventManager.queueAndDispatch(EventType.UPDATED, key, newValue, currentValue, this);
-            result = true;
-        } else {
-            result = false;
-        }
-
-        if (configuration.isStatisticsEnabled()) {
-            long time = System.nanoTime() - start;
-            statisticsMxBean.addGetTimeNano(time);
-            if (currentValue == null) {
-                statisticsMxBean.increaseCacheMisses(1L);
+        //TODO expiry
+        try {
+            boolean result;
+            SerializableDocument currentDoc = bucket.get(cbKey, SerializableDocument.class);
+            V currentValue = currentDoc == null ? null : (V) currentDoc.content();
+            if (currentValue != null && currentValue.equals(oldValue)) {
+                try {
+                    SerializableDocument newDoc = SerializableDocument.create(
+                            cbKey, toInternalValue(newValue), currentDoc.cas());
+                    bucket.replace(newDoc);
+                    eventManager.queueAndDispatch(EventType.UPDATED, key, newValue, currentValue, this);
+                    result = true;
+                } catch (CASMismatchException e) {
+                    result = false;
+                } catch (DocumentDoesNotExistException e) {
+                    result = false;
+                }
             } else {
-                statisticsMxBean.increaseCacheHits(1L);
+                result = false;
             }
 
-            if (result) {
-                statisticsMxBean.increaseCachePuts(1L);
-                statisticsMxBean.addPutTimeNano(time);
+            if (configuration.isStatisticsEnabled()) {
+                long time = System.nanoTime() - start;
+                statisticsMxBean.addGetTimeNano(time);
+                if (currentValue == null) {
+                    statisticsMxBean.increaseCacheMisses(1L);
+                } else {
+                    statisticsMxBean.increaseCacheHits(1L);
+                }
+
+                if (result) {
+                    statisticsMxBean.increaseCachePuts(1L);
+                    statisticsMxBean.addPutTimeNano(time);
+                }
             }
+
+            return result;
+        } catch (Exception e) {
+            throw exception("Couldn't get old value for replace", e);
         }
+    }
 
-        return result;
+    private void internalReplace(K key, V value, V oldValue, String cbKey, Serializable internalValue, long cas) {
+        SerializableDocument newDoc = SerializableDocument.create(cbKey, internalValue, cas);
+        bucket.replace(newDoc);
+        eventManager.queueAndDispatch(EventType.UPDATED, key, value, oldValue, this);
     }
 
     @Override
     public boolean replace(K key, V value) {
         checkOpen();
         String cbKey = toInternalKey(key);
+        Serializable cbValue = toInternalValue(value);
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0L;
 
-        //TODO locks, expiry
-        boolean result;
-        V oldValue = internalGet(cbKey);
-        if (oldValue == null) {
-            result = false;
-        } else {
-            internalPut(cbKey, value);
-            eventManager.queueAndDispatch(EventType.UPDATED, key, value, oldValue, this);
-            result = true;
-        }
-
-        if (configuration.isStatisticsEnabled()) {
-            long time = System.nanoTime() - start;
-            statisticsMxBean.addGetTimeNano(time);
-            if (result) {
-                statisticsMxBean.addPutTimeNano(time);
-                statisticsMxBean.increaseCachePuts(1L);
-                statisticsMxBean.increaseCacheHits(1L);
+        //TODO expiry
+        try {
+            boolean result;
+            SerializableDocument oldDoc = bucket.get(cbKey, SerializableDocument.class);
+            V oldValue = oldDoc == null ? null : (V) oldDoc.content();
+            if (oldValue == null) {
+                result = false;
             } else {
-                statisticsMxBean.increaseCacheMisses(1L);
+                try {
+                    internalReplace(key, value, oldValue, cbKey, cbValue, oldDoc.cas());
+                    result = true;
+                } catch (CASMismatchException e) {
+                    //retry to get the latest value and remove it, this time locking
+                    SerializableDocument latest = bucket.getAndLock(cbKey, 1, SerializableDocument.class);
+                    V latestValue = latest == null ? null : (V) latest.content();
+                    if (latest == null) {
+                        result = false;
+                    } else {
+                        internalReplace(key, value, latestValue, cbKey, cbValue, latest.cas());
+                        result = true;
+                    }
+                } catch (DocumentDoesNotExistException e) {
+                    result = false;
+                }
             }
 
-        }
+            if (configuration.isStatisticsEnabled()) {
+                long time = System.nanoTime() - start;
+                statisticsMxBean.addGetTimeNano(time);
+                if (result) {
+                    statisticsMxBean.addPutTimeNano(time);
+                    statisticsMxBean.increaseCachePuts(1L);
+                    statisticsMxBean.increaseCacheHits(1L);
+                } else {
+                    statisticsMxBean.increaseCacheMisses(1L);
+                }
 
-        return result;
+            }
+
+            return result;
+        } catch (Exception e) {
+            throw exception("Couldn't replace " + key, e);
+        }
     }
 
     @Override
@@ -534,27 +625,46 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         String cbKey = toInternalKey(key);
 
         long start = configuration.isStatisticsEnabled() ? System.nanoTime() : 0;
-        //TODO locks, expiry
+        //TODO expiry
 
-        V oldValue = internalGet(cbKey);
-        if (oldValue != null) {
-            internalPut(cbKey, value);
-            eventManager.queueAndDispatch(EventType.UPDATED, key, value, oldValue, this);
-        }
-
-        if (configuration.isStatisticsEnabled()) {
-            long time = System.nanoTime() - start;
-            if (oldValue == null) {
-                statisticsMxBean.increaseCacheMisses(1L);
-            } else {
-                statisticsMxBean.increaseCacheHits(1L);
-                statisticsMxBean.increaseCachePuts(1L);
-                statisticsMxBean.addPutTimeNano(time);
+        try {
+            SerializableDocument oldDoc = bucket.get(cbKey, SerializableDocument.class);
+            V oldValue = oldDoc == null ? null : (V) oldDoc.content();
+            if (oldValue != null) {
+                Serializable cbValue = toInternalValue(value);
+                try {
+                    internalReplace(key, value, oldValue, cbKey, cbValue, oldDoc.cas());
+                } catch (DocumentDoesNotExistException e) {
+                    oldValue = null;
+                } catch (CASMismatchException e) {
+                    //retry, this time locking
+                    SerializableDocument latestDoc = bucket.getAndLock(cbKey, 1, SerializableDocument.class);
+                    if (latestDoc == null) {
+                        oldValue = null;
+                    } else {
+                        V latestValue = (V) latestDoc.content();
+                        internalReplace(key, value, latestValue, cbKey, cbValue, latestDoc.cas());
+                        oldValue = latestValue;
+                    }
+                }
             }
-            statisticsMxBean.addGetTimeNano(time);
-        }
 
-        return oldValue;
+            if (configuration.isStatisticsEnabled()) {
+                long time = System.nanoTime() - start;
+                if (oldValue == null) {
+                    statisticsMxBean.increaseCacheMisses(1L);
+                } else {
+                    statisticsMxBean.increaseCacheHits(1L);
+                    statisticsMxBean.increaseCachePuts(1L);
+                    statisticsMxBean.addPutTimeNano(time);
+                }
+                statisticsMxBean.addGetTimeNano(time);
+            }
+
+            return oldValue;
+        } catch (Exception e) {
+            throw exception("Couldn't getAndReplace " + key, e);
+        }
     }
 
     @Override
@@ -796,20 +906,6 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         }
     }
 
-    private V internalGet(String cbKey) {
-        SerializableDocument doc = bucket.get(cbKey, SerializableDocument.class);
-        if (doc == null) {
-            return null;
-        }
-        return (V) doc.content();
-    }
-
-    private void internalPut(String cbKey, V value) {
-        SerializableDocument doc = SerializableDocument.create(cbKey, toInternalValue(value));
-        bucket.upsert(doc);
-    }
-
-
     private void internalClear(Action1<? super SerializableDocument> action) {
         getAllKeys()
                 .flatMap(new Func1<String, Observable<SerializableDocument>>() {
@@ -928,6 +1024,14 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             return (Serializable) value;
         } else {
             throw new ClassCastException("This cache can only accept Serializable values");
+        }
+    }
+
+    private CacheException exception(String message, Exception e) {
+        if (e instanceof CacheException) {
+            return (CacheException) e;
+        } else {
+            return new CacheException(message, e);
         }
     }
 
