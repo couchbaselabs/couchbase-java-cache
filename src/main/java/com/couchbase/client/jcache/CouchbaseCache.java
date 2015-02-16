@@ -39,6 +39,8 @@ import javax.cache.processor.EntryProcessor;
 import javax.cache.processor.EntryProcessorException;
 import javax.cache.processor.EntryProcessorResult;
 
+import com.couchbase.client.core.lang.Tuple;
+import com.couchbase.client.core.lang.Tuple3;
 import com.couchbase.client.core.logging.CouchbaseLogger;
 import com.couchbase.client.core.logging.CouchbaseLoggerFactory;
 import com.couchbase.client.java.Bucket;
@@ -55,9 +57,11 @@ import com.couchbase.client.jcache.management.CouchbaseCacheMxBean;
 import com.couchbase.client.jcache.management.CouchbaseStatisticsMxBean;
 import com.couchbase.client.jcache.management.ManagementUtil;
 import rx.Observable;
+import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Actions;
 import rx.functions.Func1;
+import rx.schedulers.Schedulers;
 
 /**
  * The Couchbase implementation of a @{link Cache}. Note that type V must be {@link Serializable}!
@@ -264,11 +268,124 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     }
 
     @Override
-    public void loadAll(Set<? extends K> keys, boolean replaceExistingValues, CompletionListener completionListener) {
+    public void loadAll(final Set<? extends K> keys, final boolean replaceExistingValues, final CompletionListener completionListener) {
         checkOpen();
-        //TODO implement
-        //TODO should dispatch CREATED for each missing key, UPDATED for each replaced value
-        throw new UnsupportedOperationException();
+
+        if (keys == null) {
+            throw new NullPointerException("Keys cannot be null");
+        }
+        for (K key : keys) {
+            if (key == null) {
+                throw new NullPointerException("Keys cannot include a null key");
+            }
+        }
+
+        if (cacheLoader == null) {
+            if (completionListener != null) {
+                completionListener.onCompletion();
+            }
+            return;
+        }
+
+        Observable.just(keys)
+                //operate in an IO thread
+                .subscribeOn(Schedulers.io())
+                //load all data from CacheLoader
+                .map(new Func1<Set<? extends K>, Map<K, V>>() {
+                    @Override
+                    public Map<K, V> call(Set<? extends K> ks) {
+                        return cacheLoader.loadAll(ks);
+                    }
+                })
+                //work on the actually loaded data
+                .flatMap(new Func1<Map<K, V>, Observable<Map.Entry<K, V>>>() {
+                    @Override
+                    public Observable<Map.Entry<K, V>> call(Map<K, V> kvMap) {
+                        return Observable.from(kvMap.entrySet());
+                    }
+                })
+                //attempt a get to see if data is already in cache, keep the key, value and current value as tuple
+                .flatMap(new Func1<Map.Entry<K, V>, Observable<Tuple3<K, V, SerializableDocument>>>() {
+                    @Override
+                    public Observable<Tuple3<K, V, SerializableDocument>> call(final Map.Entry<K, V> kv) {
+                        return bucket.async().get(toInternalKey(kv.getKey()), SerializableDocument.class)
+                        .map(new Func1<SerializableDocument, Tuple3<K, V, SerializableDocument>>() {
+                            @Override
+                            public Tuple3<K, V, SerializableDocument> call(SerializableDocument doc) {
+                                return Tuple.create(kv.getKey(), kv.getValue(), doc);
+                            }
+                        });
+                    }
+                })
+                //depending on if the value is already in cache or not, insert or replace. Keep track in tuple.
+                .flatMap(new Func1<Tuple3<K, V, SerializableDocument>, Observable<Tuple3<K, V, V>>>() {
+                    @Override
+                    public Observable<Tuple3<K, V, V>> call(final Tuple3<K, V, SerializableDocument> kvd) {
+                        if (kvd.value3() == null) {
+                            //no value in cache. take expiry into account to see if a creation is needed.
+                            SerializableDocument newDoc = createDocument(kvd.value1(), kvd.value2(), Operation.CREATION);
+                            if (newDoc == null) {
+                                return Observable.empty();
+                            } else {
+                                return bucket.async().insert(newDoc)
+                                .map(new Func1<SerializableDocument, Tuple3<K, V, V>>() {
+                                    @Override
+                                    public Tuple3<K, V, V> call(SerializableDocument serializableDocument) {
+                                        return Tuple.create(kvd.value1(), kvd.value2(), null);
+                                    }
+                                });
+                            }
+                        } else {
+                            //value in cache, should we update it? (taking expiry into account)
+                            SerializableDocument updateDoc = createDocument(kvd.value1(), kvd.value2(), Operation.UPDATE);
+                            final V oldValue = (V) kvd.value3().content();
+                            if (updateDoc == null || !replaceExistingValues) {
+                                return Observable.empty();
+                            } else {
+                                return bucket.async().replace(updateDoc)
+                                .map(new Func1<SerializableDocument, Tuple3<K, V, V>>() {
+                                    @Override
+                                    public Tuple3<K, V, V> call(SerializableDocument serializableDocument) {
+                                         return Tuple.create(kvd.value1(), kvd.value2(), oldValue);
+                                     }
+                                });
+                            }
+                        }
+                    }
+                })
+                .subscribe(
+                        //for each value, prepare an event notification
+                        new Action1<Tuple3<K, V, V>>() {
+                            @Override
+                            public void call(Tuple3<K, V, V> kvOldValue) {
+                                EventType type = EventType.CREATED;
+                                if (kvOldValue.value3() != null) {
+                                    type = EventType.UPDATED;
+                                }
+                                eventManager.queueEvent(new CouchbaseCacheEntryEvent(type, kvOldValue.value1(),
+                                        kvOldValue.value2(), kvOldValue.value3(), CouchbaseCache.this));
+                            }
+                        },
+                        //in case of error dispatch the events and notify the error
+                        new Action1<Throwable>() {
+                            @Override
+                            public void call(Throwable throwable) {
+                                eventManager.dispatch();
+                                if (completionListener != null && throwable instanceof Exception) {
+                                    completionListener.onException((Exception) throwable);
+                                }
+                            }
+                        },
+                        //in case of completion, dispatch the events and notify completion
+                        new Action0() {
+                            @Override
+                            public void call() {
+                                eventManager.dispatch();
+                                if (completionListener != null) {
+                                    completionListener.onCompletion();
+                                }
+                            }
+                        });
     }
 
     @Override
