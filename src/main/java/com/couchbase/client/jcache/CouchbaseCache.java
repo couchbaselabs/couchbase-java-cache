@@ -859,24 +859,15 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     public Iterator<Entry<K, V>> iterator() {
         checkOpen();
 
-        //TODO redo the iterator, implement a custom one (with remove() and associated stats/event?)
-
-        return getAllKeys()
+        //TODO trigger associated stats/events in iterator
+        return new CouchbaseCacheIterator<K, V>(this.bucket, this.keyConverter,
+                getAllKeys()
                 .flatMap(new Func1<String, Observable<SerializableDocument>>() {
                     @Override
                     public Observable<SerializableDocument> call(String id) {
                         return bucket.async().get(id, SerializableDocument.class);
                     }
-                })
-                .map(new Func1<SerializableDocument, Entry<K, V>>() {
-                    @Override
-                    public Entry<K, V> call(SerializableDocument serializableDocument) {
-                        //FIXME this should expose the K domain key, not internal String id
-                        return new CouchbaseCacheEntry(serializableDocument.id(), serializableDocument.content());
-                    }
-                })
-                .toBlocking()
-                .getIterator();
+                }));
     }
 
     private String[] checkAndGetViewInfo() {
