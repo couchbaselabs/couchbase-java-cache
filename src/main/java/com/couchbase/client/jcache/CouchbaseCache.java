@@ -138,7 +138,9 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         }
 
         this.keyPrefix = configuration.getCachePrefix() == null ? "" : configuration.getCachePrefix();
-        this.keyConverter = configuration.getKeyConverter();
+        this.keyConverter = configuration.getCachePrefix() == null
+                ? configuration.getKeyConverter()
+                : new KeyConverter.PrefixedKeyConverter(configuration.getKeyConverter(), keyPrefix);
         this.bucket = cacheManager.getCluster().openBucket(configuration.getBucketName(),
                 configuration.getBucketPassword());
     }
@@ -1123,17 +1125,14 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         if (key == null) {
             throw new NullPointerException("Keys must not be null");
         }
-        return keyPrefix + keyConverter.asString(key);
+        return this.keyConverter.asString(key);
     }
 
     protected K fromInternalKey(String internalKey) {
         if (internalKey == null) {
             throw new NullPointerException("Internal key must not be null");
         }
-        //strip the prefix
-        internalKey = internalKey.replaceFirst(keyPrefix, "");
-        //transform back to K
-        return keyConverter.fromString(internalKey);
+        return this.keyConverter.fromString(internalKey);
     }
 
     private Serializable toInternalValue(V value) {
