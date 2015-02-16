@@ -57,4 +57,31 @@ public interface KeyConverter<K> extends Serializable {
      * @return the key in K form.
      */
     public K fromString(String internalKey);
+
+
+    /**
+     * A {@link KeyConverter} that adds/removes a prefix to keys otherwise managed by a delegate KeyConverter.
+     */
+    public static class PrefixedKeyConverter<K> implements KeyConverter<K> {
+        private final KeyConverter<K> delegate;
+        private final String keyPrefix;
+
+        public PrefixedKeyConverter(KeyConverter<K> wrappedConverter, String keyPrefix) {
+            this.delegate = wrappedConverter;
+            this.keyPrefix = keyPrefix;
+        }
+
+        @Override
+        public String asString(K key) {
+            return keyPrefix + delegate.asString(key);
+        }
+
+        @Override
+        public K fromString(String internalKey) {
+            //strip the prefix
+            internalKey = internalKey.replaceFirst(keyPrefix, "");
+            //transform back to K
+            return delegate.fromString(internalKey);
+        }
+    }
 }
