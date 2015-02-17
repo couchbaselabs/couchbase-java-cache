@@ -40,6 +40,7 @@ import javax.cache.processor.EntryProcessorException;
 import javax.cache.processor.EntryProcessorResult;
 
 import com.couchbase.client.core.lang.Tuple;
+import com.couchbase.client.core.lang.Tuple2;
 import com.couchbase.client.core.lang.Tuple3;
 import com.couchbase.client.core.logging.CouchbaseLogger;
 import com.couchbase.client.core.logging.CouchbaseLoggerFactory;
@@ -858,16 +859,34 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     @Override
     public Iterator<Entry<K, V>> iterator() {
         checkOpen();
+        CouchbaseCacheIterator.TimeAndDocHook visitAction = new CouchbaseCacheIterator.TimeAndDocHook() {
+            @Override
+            public void call(Tuple2<Long, SerializableDocument> timeAndDoc) {
+                SerializableDocument serializableDocument = timeAndDoc.value2();
+                touchIfNeeded(serializableDocument.id());
+                if (isStatisticsEnabled()) {
+                    statisticsMxBean.increaseCacheHits(1L);
+                    statisticsMxBean.addGetTimeNano(System.nanoTime() - timeAndDoc.value1());
+                }
+            }
+        };
+        CouchbaseCacheIterator.TimeAndDocHook removeAction = new CouchbaseCacheIterator.TimeAndDocHook() {
+            @Override
+            public void call(Tuple2<Long, SerializableDocument> timeAndDoc) {
+                K key = keyConverter.fromString(timeAndDoc.value2().id());
+                V value = (V) timeAndDoc.value2().content();
+                long start = timeAndDoc.value1();
 
-        //TODO trigger associated stats/events in iterator
+                eventManager.queueAndDispatch(EventType.REMOVED, key, value, null, CouchbaseCache.this);
+                if (isStatisticsEnabled()) {
+                    statisticsMxBean.increaseCacheEvictions(1L);
+                    statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
+                }
+            }
+        };
+
         return new CouchbaseCacheIterator<K, V>(this.bucket, this.keyConverter,
-                getAllKeys()
-                .flatMap(new Func1<String, Observable<SerializableDocument>>() {
-                    @Override
-                    public Observable<SerializableDocument> call(String id) {
-                        return bucket.async().get(id, SerializableDocument.class);
-                    }
-                }));
+                getAllKeys(), visitAction, removeAction);
     }
 
     private String[] checkAndGetViewInfo() {

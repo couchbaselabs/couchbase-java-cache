@@ -20,15 +20,20 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.cache.Cache;
 
+import com.couchbase.client.core.lang.Tuple;
+import com.couchbase.client.core.lang.Tuple2;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.document.SerializableDocument;
 import rx.Notification;
 import rx.Observable;
 import rx.Subscriber;
 import rx.exceptions.Exceptions;
+import rx.functions.Action1;
+import rx.functions.Func1;
+import rx.functions.Func2;
 
 /**
- * An iterator over a {@link CouchbaseCache}, that uses a stream of all documents in the cache,
+ * An iterator over a stream of documents in a {@link CouchbaseCache}, usually all documents, that uses
  * the cache's {@link KeyConverter} and the underlying {@link Bucket} to notably implement {@link #remove()}.
  *
  * @author Simon Baslé
@@ -40,30 +45,95 @@ class CouchbaseCacheIterator<K, V> implements Iterator<Cache.Entry<K, V>> {
     private final BlockingQueue<Notification<? extends SerializableDocument>> notifications =
             new LinkedBlockingQueue<Notification<? extends SerializableDocument>>();
     private final KeyConverter<K> keyConverter;
+    private final Action1<Tuple2<Long, SerializableDocument>> onRemoveAction;
 
     private SerializableDocument current;
     private Notification<? extends SerializableDocument> next;
 
+
+    private static final Func2<Long, SerializableDocument, Tuple2<Long, SerializableDocument>> timeAndDocZipFunction =
+            new Func2<Long, SerializableDocument, Tuple2<Long, SerializableDocument>>() {
+                @Override
+                public Tuple2<Long, SerializableDocument> call(Long aLong, SerializableDocument serializableDocument) {
+                    return Tuple.create(aLong, serializableDocument);
+                }
+            };
+
+    /**
+     * Iterator constructor without side effects (stats, event notification), mainly useful for tests.
+     *
+     * @param bucket the bucket on which to remove.
+     * @param keyConverter the {@link KeyConverter} to use to translate to/from document keys vs domain keys.
+     * @param stream the stream of documents IDs to iterate over.
+     */
+    protected CouchbaseCacheIterator(Bucket bucket, KeyConverter<K> keyConverter,
+            Observable<String> stream) {
+        this(bucket, keyConverter, stream, null, null);
+    }
+
+    /**
+     * Iterator constructor that allows to hook side effects (stats, event notification) on the iteration and removal.
+     *
+     * @param bucket the bucket on which to remove.
+     * @param keyConverter the {@link KeyConverter} to use to translate to/from document keys vs domain keys.
+     * @param stream the stream of document IDs to iterate over.
+     * @param onEachAction the hook to be called each time an element is pulled ({@link #next()}).
+     * @param onRemoveAction the hook to be called each time an element is removed ({@link #remove()}).
+     */
     public CouchbaseCacheIterator(Bucket bucket, KeyConverter<K> keyConverter,
-            Observable<SerializableDocument> stream) {
+            Observable<String> stream,
+            TimeAndDocHook onEachAction,
+            TimeAndDocHook onRemoveAction) {
         this.bucket = bucket;
         this.keyConverter = keyConverter;
 
-        stream.materialize().subscribe(new Subscriber<Notification<? extends SerializableDocument>>() {
-            @Override
-            public void onCompleted() {
-            }
+        if (onEachAction == null) {
+            onEachAction = EMPTY;
+        }
+        if (onRemoveAction == null) {
+            this.onRemoveAction = EMPTY;
+        } else {
+            this.onRemoveAction = onRemoveAction;
+        }
 
-            @Override
-            public void onError(Throwable e) {
-                notifications.offer(Notification.<SerializableDocument>createOnError(e));
-            }
+        stream
+                //record the starting time before actually getting the value
+                .flatMap(new Func1<String, Observable<Tuple2<Long, SerializableDocument>>>() {
+                    @Override
+                    public Observable<Tuple2<Long, SerializableDocument>> call(String id) {
+                        return Observable.zip(
+                                Observable.just(System.nanoTime()),
+                                CouchbaseCacheIterator.this.bucket.async().get(id, SerializableDocument.class),
+                                timeAndDocZipFunction);
+                    }
+                })
+                //call hook with start time and document
+                .doOnNext(onEachAction)
+                //simplify back to just the document
+                .map(new Func1<Tuple2<Long,SerializableDocument>, SerializableDocument>() {
+                    @Override
+                    public SerializableDocument call(Tuple2<Long, SerializableDocument> timeAndDoc) {
+                        return timeAndDoc.value2();
+                    }
+                })
+                //materialize a feed of notifications out of it
+                .materialize()
+                //push the notifications into a queue
+                .subscribe(new Subscriber<Notification<? extends SerializableDocument>>() {
+                    @Override
+                    public void onCompleted() {
+                    }
 
-            @Override
-            public void onNext(Notification<? extends SerializableDocument> args) {
-                notifications.offer(args);
-            }
-        });
+                    @Override
+                    public void onError(Throwable e) {
+                        notifications.offer(Notification.<SerializableDocument>createOnError(e));
+                    }
+
+                    @Override
+                    public void onNext(Notification<? extends SerializableDocument> args) {
+                        notifications.offer(args);
+                    }
+                });
     }
 
     @Override
@@ -90,7 +160,12 @@ class CouchbaseCacheIterator<K, V> implements Iterator<Cache.Entry<K, V>> {
     @Override
     public void remove() {
         if (current != null) {
-            bucket.remove(current);
+            //record the remove starting time and do the remove, then call the remove hook
+            Observable.zip(
+                    Observable.just(System.nanoTime()),
+                    bucket.async().remove(current),
+                    timeAndDocZipFunction
+            ).subscribe(onRemoveAction);
             current = null;
         } else {
             throw new IllegalStateException("remove() must be called at most once after a call to next()");
@@ -104,4 +179,13 @@ class CouchbaseCacheIterator<K, V> implements Iterator<Cache.Entry<K, V>> {
             throw Exceptions.propagate(e);
         }
     }
+
+    public static interface TimeAndDocHook extends Action1<Tuple2<Long, SerializableDocument>> { }
+
+    public static final TimeAndDocHook EMPTY = new TimeAndDocHook() {
+        @Override
+        public void call(Tuple2<Long, SerializableDocument> longSerializableDocumentTuple2) {
+            //NO-OP
+        }
+    };
 }

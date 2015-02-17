@@ -16,6 +16,9 @@ package com.couchbase.client.jcache;
 
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -25,9 +28,12 @@ import java.util.NoSuchElementException;
 
 import javax.cache.Cache;
 
+import com.couchbase.client.core.lang.Tuple2;
+import com.couchbase.client.java.AsyncBucket;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.document.Document;
 import com.couchbase.client.java.document.SerializableDocument;
+import com.couchbase.client.jcache.CouchbaseCacheIterator.TimeAndDocHook;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
@@ -37,8 +43,9 @@ import rx.Subscriber;
 
 public class CouchbaseCacheIteratorTest {
 
-    private static List<SerializableDocument> docsList;
-    private static ArrayList<Double> valueList;
+    private static List<String> keyList;
+    private static List<Double> valueList;
+    private static Bucket mockBucket;
 
     private static final KeyConverter<Integer> CONVERTER = new KeyConverter<Integer>() {
         @Override
@@ -54,33 +61,59 @@ public class CouchbaseCacheIteratorTest {
 
     @BeforeClass
     public static void init() {
-        docsList = new ArrayList<SerializableDocument>(10);
+        keyList = new ArrayList<String>(10);
         valueList = new ArrayList<Double>(10);
         for (int i = 0; i < 10; i++) {
             Double value = new Double(i + 0.4d);
             valueList.add(value);
-            docsList.add(SerializableDocument.create(CONVERTER.asString(i), value));
+            keyList.add(CONVERTER.asString(i));
         }
-    }
 
-    @Test
-    public void shouldIterateFully() {
-        final List<String> removedKeys = new ArrayList<String>(10);
-        Observable<SerializableDocument> docs = Observable.from(docsList);
-        Bucket bucket = mock(Bucket.class);
-        when(bucket.remove(any(SerializableDocument.class))).thenAnswer(new Answer<SerializableDocument>() {
+        mockBucket = mock(Bucket.class);
+        AsyncBucket mockAsyncBucket = mock(AsyncBucket.class);
+        when(mockBucket.async()).thenReturn(mockAsyncBucket);
+
+        when(mockAsyncBucket.get(anyString(), eq(SerializableDocument.class))).then(new Answer<Observable>() {
             @Override
-            public SerializableDocument answer(InvocationOnMock invocation) throws Throwable {
-                SerializableDocument doc = (SerializableDocument) invocation.getArguments()[0];
-                removedKeys.add(doc.id());
-                return doc;
+            public Observable answer(InvocationOnMock invocation) throws Throwable {
+                String id = (String) invocation.getArguments()[0];
+                Double value = CONVERTER.fromString(id) + 0.4d;
+                return Observable.just(SerializableDocument.create(id, value));
             }
         });
 
-        CouchbaseCacheIterator<Integer, Double> iterator = new CouchbaseCacheIterator<Integer, Double>(
-                bucket, CONVERTER, docs);
+        when(mockAsyncBucket.remove(any(SerializableDocument.class))).then(new Answer<Observable>() {
+            @Override
+            public Observable answer(InvocationOnMock invocation) throws Throwable {
+                return Observable.just(invocation.getArguments()[0]);
+            }
+        });
 
+    }
+
+    @Test
+    public void shouldIterateFullyAndRemove() {
+        final List<SerializableDocument> removed = new ArrayList<SerializableDocument>(10);
+        final List<SerializableDocument> visited = new ArrayList<SerializableDocument>(10);
         List<Double> extractedValues = new ArrayList<Double>(10);
+
+        Observable<String> ids = Observable.from(keyList);
+        TimeAndDocHook onRemoveAction = new TimeAndDocHook() {
+            @Override
+            public void call(Tuple2<Long, SerializableDocument> timeAndDoc) {
+                removed.add(timeAndDoc.value2());
+            }
+        };
+        TimeAndDocHook onEachAction = new TimeAndDocHook() {
+            @Override
+            public void call(Tuple2<Long, SerializableDocument> timeAndDoc) {
+                visited.add(timeAndDoc.value2());
+            }
+        };
+
+        CouchbaseCacheIterator<Integer, Double> iterator = new CouchbaseCacheIterator<Integer, Double>(
+                mockBucket, CONVERTER, ids, onEachAction, onRemoveAction);
+
         while(iterator.hasNext()) {
             Cache.Entry<Integer, Double> entry = iterator.next();
             assertNotNull(entry);
@@ -92,33 +125,38 @@ public class CouchbaseCacheIteratorTest {
         }
 
         assertEquals(10, extractedValues.size());
-        assertEquals(10, removedKeys.size());
+        assertEquals(10, removed.size());
+        assertEquals(10, visited.size());
 
         for (int i = 0; i < 10; i++) {
             Double extractedValue = extractedValues.get(i);
-            String removedKey = removedKeys.get(i);
+            String expectedKey = "s" + i;
+            SerializableDocument removedDoc = removed.get(i);
+            SerializableDocument visitedDoc = visited.get(i);
 
             assertEquals(i + 0.4d, extractedValue, 0d);
-            assertEquals("s" + i, removedKey);
+            assertEquals(expectedKey, visitedDoc.id());
+            assertEquals(extractedValue, visitedDoc.content());
+            assertEquals(expectedKey, removedDoc.id());
+            assertEquals(extractedValue, removedDoc.content());
         }
     }
 
     @Test
     public void shouldPropagateExceptionWhenExceptionThrownInIterator() {
-        Bucket bucket = mock(Bucket.class);
-        final Observable<SerializableDocument> docs = Observable.create(
-                new Observable.OnSubscribe<SerializableDocument>() {
+        final Observable<String> docs = Observable.create(
+                new Observable.OnSubscribe<String>() {
                     @Override
-                    public void call(Subscriber<? super SerializableDocument> subscriber) {
-                        subscriber.onNext(docsList.get(0));
-                        subscriber.onNext(docsList.get(1));
+                    public void call(Subscriber<? super String> subscriber) {
+                        subscriber.onNext(keyList.get(0));
+                        subscriber.onNext(keyList.get(1));
                         subscriber.onError(new IllegalStateException());
                     }
                 }
         );
 
         CouchbaseCacheIterator<Integer, Double> iterator = new CouchbaseCacheIterator<Integer, Double>(
-                bucket, CONVERTER, docs);
+                mockBucket, CONVERTER, docs);
 
         List<Double> extractedValues = new ArrayList<Double>(10);
         int countBeforeNext = 0;
@@ -134,33 +172,27 @@ public class CouchbaseCacheIteratorTest {
 
         assertEquals(2, extractedValues.size());
         assertEquals(2, countBeforeNext);
-        assertEquals(docsList.get(0).content(), extractedValues.get(0));
-        assertEquals(docsList.get(1).content(), extractedValues.get(1));
+        assertEquals(valueList.get(0), extractedValues.get(0));
+        assertEquals(valueList.get(1), extractedValues.get(1));
     }
 
     @Test(expected = IllegalStateException.class)
     public void shouldIllegalStateExceptionIfRemovedCalledBeforeNext() {
-        Bucket bucket = mock(Bucket.class);
-        when(bucket.remove(any(Document.class))).thenReturn(null); //ignore remove itself
-
-        CouchbaseCacheIterator iterator = new CouchbaseCacheIterator(bucket, CONVERTER,
-                Observable.just(SerializableDocument.create(CONVERTER.asString(0), "test")));
+        CouchbaseCacheIterator<Integer, Double> iterator = new CouchbaseCacheIterator<Integer, Double>(
+                mockBucket, CONVERTER, Observable.just(CONVERTER.asString(0)));
 
         assertTrue(iterator.hasNext());
-        //trigger IllegalArgumentException
+        //trigger IllegalStateException
         iterator.remove();
     }
 
     @Test
     public void shouldIllegalStateExceptionIfRemovedCalledTwice() {
-        Bucket bucket = mock(Bucket.class);
-        when(bucket.remove(any(Document.class))).thenReturn(null); //ignore remove itself
-
-        CouchbaseCacheIterator iterator = new CouchbaseCacheIterator(bucket, CONVERTER,
-                Observable.just(SerializableDocument.create(CONVERTER.asString(0), "test")));
+        CouchbaseCacheIterator<Integer, Double> iterator = new CouchbaseCacheIterator<Integer, Double>(
+                mockBucket, CONVERTER, Observable.just(CONVERTER.asString(0)));
 
         assertTrue(iterator.hasNext());
-        assertEquals("test", iterator.next().getValue());
+        assertEquals(0.4d, iterator.next().getValue(), 0d);
 
         //don't trigger exception on first remove
         iterator.remove();
@@ -175,14 +207,11 @@ public class CouchbaseCacheIteratorTest {
 
     @Test(expected = NoSuchElementException.class)
     public void shouldNoSuchElementExceptionIfNextCalledOneExtraTime() {
-        Bucket bucket = mock(Bucket.class);
-        when(bucket.remove(any(Document.class))).thenReturn(null); //ignore remove itself
-
-        CouchbaseCacheIterator iterator = new CouchbaseCacheIterator(bucket, CONVERTER,
-                Observable.just(SerializableDocument.create(CONVERTER.asString(0), "test")));
+        CouchbaseCacheIterator<Integer, Double> iterator = new CouchbaseCacheIterator<Integer, Double>(
+                mockBucket, CONVERTER,Observable.just(CONVERTER.asString(0)));
 
         assertTrue(iterator.hasNext());
-        assertEquals("test", iterator.next().getValue());
+        assertEquals(0.4d, iterator.next().getValue(), 0d);
         assertFalse(iterator.hasNext());
         //trigger NoSuchElementException
         iterator.next();
