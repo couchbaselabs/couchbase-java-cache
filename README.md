@@ -8,12 +8,10 @@ See JSR-107 [specification](https://docs.google.com/document/d/1MZQstO9GJo_MUMy5
 Basic operations are implemented for now.
 
 ## What's partially there / missing
- * Limited tracking of statistics
- * Expiration is managed by the underlying couchbase bucket
- * No support for listeners
+ * Expiration is managed by the underlying couchbase bucket and is not notified
  * No support for EntryProcessors
- * No locking, so the "atomic operations" of the specification should not yet be considered as such
- * For now, write-through is not implemented and read-through is only implemented in Get
+ * No pessimistic locking / distributed locking. Couchbase optimistic locking is used in a best effort to approximate the JSR107 consistency model.
+ * For now, write-through is not implemented and read-through is only implemented in `Get` and `LoadAll
 
 ## How to use
 The CouchbaseCacheManager keeps a reference to a Couchbase Cluster under the wire. It will create Caches mapped to Couchbase Buckets.
@@ -31,6 +29,8 @@ If you already use Couchbase in your application, you should reuse the `Couchbas
 After that, obtain a CouchbaseCacheManager and create some Caches! A `CouchbaseConfiguration` tied to the same name as its corresponding `CouchbaseCache` is expected for that, and an `IllegalArgumentException` will be thrown if this is not the case.
 
 ## Tests, examples
-`BasicCacheIntegrationTest` contains some tests and can serve as an example of creating caches and performing basic operations with them.
+`BasicCacheIntegrationTest` contains some tests and can serve as an example of creating caches.
+`BasicOperationTest` tests most of the data-manipulation operations of the cache.
 
 Integration tests use the following buckets : "default" and "jcache" (with "jcache" as password). Both should probably be flushed beforehand (at least remove "test" key).
+`BasicOperationTest` integration test uses the dedicated bucket `dedicatedCache`, which is flushed at each testcase run.
