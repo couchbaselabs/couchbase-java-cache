@@ -145,6 +145,10 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 configuration.getBucketPassword());
     }
 
+    public KeyConverter<K> keyConverter() {
+        return this.keyConverter;
+    }
+
     /**
      * Allows to enable/disable statistics via JMX.
      * This will also update the configuration.
