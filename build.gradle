@@ -150,9 +150,9 @@ def pomConfig = {
         }
     }
     scm {
-        url 'https://github.com/couchbase/couchbase-java-cache'
-        connection 'scm:git:git://github.com/couchbase/couchbase-java-cache'
-        developerConnection 'scm:git:git://github.com/couchbase/couchbase-java-cache'
+        url 'https://github.com/couchbaselabs/couchbase-java-cache'
+        connection 'scm:git:git://github.com/couchbaselabs/couchbase-java-cache'
+        developerConnection 'scm:git:git://github.com/couchbaselabs/couchbase-java-cache'
     }
     issueManagement {
         system "Couchbase JIRA"
@@ -191,6 +191,17 @@ publishing  {
                 root.appendNode('description', 'Official Couchbase JCache Implementation')
                 root.children().last() + pomConfig
             }
+
+            //maven-publish limitation puts all compile scopes in runtime, fix that
+            pom.withXml {
+                asNode().dependencies.'*'.findAll() {
+                    it.scope.text() == 'runtime' && project.configurations.compile.allDependencies.find { dep ->
+                        dep.name == it.artifactId.text()
+                    }
+                }.each() {
+                    it.scope*.value = 'compile'
+                }
+            }
         }
     }
 
@@ -217,45 +228,6 @@ def customizePom(def pom) {
         // sort to make pom dependencies order consistent to ease comparison of older poms
         generatedPom.dependencies = generatedPom.dependencies.sort { dep ->
             "$dep.scope:$dep.groupId:$dep.artifactId"
-        }
-
-        // add all items necessary for maven central publication
-        generatedPom.project {
-            name = rootProject.name
-            description = rootProject.description
-            url = 'http://couchbase.com'
-            organization {
-                name = 'Couchbase, Inc.'
-                url = 'http://couchbase.com'
-            }
-            licenses {
-                license {
-                    name 'The Apache Software License, Version 2.0'
-                    url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-                    distribution 'repo'
-                }
-            }
-            scm {
-                url = 'https://github.com/couchbase/couchbase-java-cache'
-                connection = 'scm:git:git://github.com/couchbase/couchbase-java-cache'
-                developerConnection = 'scm:git:git://github.com/couchbase/couchbase-java-cache'
-            }
-            developers {
-                developer {
-                    id 'simonbasle'
-                    name 'Simon Baslé'
-                    email 'simon@couchbase.com'
-                }
-                developer {
-                    id = 'daschl'
-                    name = 'Michael Nitschinger'
-                    email = 'michael.nitschinger@couchbase.com'
-                }
-            }
-            issueManagement {
-                system = "Couchbase JIRA"
-                url = "http://www.couchbase.com/issues/browse/JCBC"
-            }
         }
     }
 }
