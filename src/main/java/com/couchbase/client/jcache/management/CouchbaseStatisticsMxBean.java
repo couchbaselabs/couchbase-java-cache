@@ -17,10 +17,7 @@ import java.io.Serializable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-import javax.cache.Cache;
 import javax.cache.management.CacheStatisticsMXBean;
-
-import com.couchbase.client.jcache.CouchbaseCache;
 
 /**
  * Couchbase Cache statistics.
@@ -51,9 +48,6 @@ public class CouchbaseStatisticsMxBean implements CacheStatisticsMXBean, Seriali
 
     private static final long serialVersionUID = 1L;
 
-    //TODO need to keep the cache at all?
-    private transient Cache<?, ?> cache;
-
     private final AtomicLong cacheRemovals = new AtomicLong();
     private final AtomicLong cacheExpiries = new AtomicLong();
     private final AtomicLong cachePuts = new AtomicLong();
@@ -63,15 +57,6 @@ public class CouchbaseStatisticsMxBean implements CacheStatisticsMXBean, Seriali
     private final AtomicLong cachePutTimeTakenNanos = new AtomicLong();
     private final AtomicLong cacheGetTimeTakenNanos = new AtomicLong();
     private final AtomicLong cacheRemoveTimeTakenNanos = new AtomicLong();
-
-    /**
-     * Constructs a cache statistics object.
-     *
-     * @param cache the associated cache
-     */
-    public CouchbaseStatisticsMxBean(CouchbaseCache<?, ?> cache) {
-        this.cache = cache;
-    }
 
     /**
      * {@inheritDoc}

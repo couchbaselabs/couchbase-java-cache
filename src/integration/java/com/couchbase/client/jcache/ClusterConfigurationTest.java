@@ -21,7 +21,6 @@ import static org.junit.Assert.fail;
 
 import java.util.concurrent.TimeoutException;
 
-import com.couchbase.client.deps.io.netty.util.Timeout;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
 import com.couchbase.client.jcache.spi.CouchbaseCachingProvider;
 import org.junit.Test;

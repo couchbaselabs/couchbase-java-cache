@@ -74,6 +74,6 @@ public class KeyConverterTest {
         Double convertedBack = prefixedConverter.fromString(prefixedConverted);
 
         assertNotNull(convertedBack);
-        assertEquals(123.45, convertedBack.doubleValue(), 0d);
+        assertEquals(123.45, convertedBack, 0d);
     }
 }

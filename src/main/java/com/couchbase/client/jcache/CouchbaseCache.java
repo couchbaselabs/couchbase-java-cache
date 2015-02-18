@@ -86,17 +86,16 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     private final ExpiryPolicy expiryPolicy;
     private final CouchbaseConfiguration<K, V> configuration;
     private final CacheLoader<K, V> cacheLoader;
-    private final CacheWriter<K, V> cacheWriter;
+    private final CacheWriter<? super K, ? super V> cacheWriter;
     private final CouchbaseCacheMxBean cacheMxBean;
     private final CouchbaseStatisticsMxBean statisticsMxBean;
-    private final CacheEventManager eventManager;
+    private final CacheEventManager<K, V> eventManager;
     private final KeyConverter<K> keyConverter;
 
     private volatile boolean isClosed;
 
     /*package scope*/
     final Bucket bucket;
-    private final String keyPrefix;
 
     /* package scope*/
     <T extends CouchbaseCacheManager> CouchbaseCache(T cacheManager, CouchbaseConfiguration<K, V> conf) {
@@ -114,7 +113,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             this.cacheLoader = null;
         }
         if (this.configuration.getCacheWriterFactory() != null) {
-            this.cacheWriter = (CacheWriter<K, V>) this.configuration.getCacheWriterFactory().create();
+            this.cacheWriter = this.configuration.getCacheWriterFactory().create();
         } else {
             this.cacheWriter = null;
         }
@@ -122,7 +121,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         this.expiryPolicy = this.configuration.getExpiryPolicyFactory().create();
 
         this.cacheMxBean = new CouchbaseCacheMxBean(this);
-        this.statisticsMxBean = new CouchbaseStatisticsMxBean(this);
+        this.statisticsMxBean = new CouchbaseStatisticsMxBean();
 
         this.isClosed = false;
 
@@ -134,14 +133,14 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         }
 
         this.eventManager = new CacheEventManager<K, V>();
-        for (CacheEntryListenerConfiguration config : configuration.getCacheEntryListenerConfigurations()) {
+        for (CacheEntryListenerConfiguration<K, V> config : configuration.getCacheEntryListenerConfigurations()) {
             this.eventManager.addListener(config);
         }
 
-        this.keyPrefix = configuration.getCachePrefix() == null ? "" : configuration.getCachePrefix();
+        String keyPrefix = configuration.getCachePrefix() == null ? "" : configuration.getCachePrefix();
         this.keyConverter = configuration.getCachePrefix() == null
                 ? configuration.getKeyConverter()
-                : new KeyConverter.PrefixedKeyConverter(configuration.getKeyConverter(), keyPrefix);
+                : new KeyConverter.PrefixedKeyConverter<K>(configuration.getKeyConverter(), keyPrefix);
         this.bucket = cacheManager.getCluster().openBucket(configuration.getBucketName(),
                 configuration.getBucketPassword());
     }
@@ -365,7 +364,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                                 if (kvOldValue.value3() != null) {
                                     type = EventType.UPDATED;
                                 }
-                                eventManager.queueEvent(new CouchbaseCacheEntryEvent(type, kvOldValue.value1(),
+                                eventManager.queueEvent(new CouchbaseCacheEntryEvent<K, V>(type, kvOldValue.value1(),
                                         kvOldValue.value2(), kvOldValue.value3(), CouchbaseCache.this));
                             }
                         },
@@ -809,7 +808,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             public void call(SerializableDocument serializableDocument) {
                 K key = fromInternalKey(serializableDocument.id());
                 V value = (V) serializableDocument.content();
-                eventManager.queueEvent(new CouchbaseCacheEntryEvent(EventType.REMOVED, key, value,
+                eventManager.queueEvent(new CouchbaseCacheEntryEvent<K, V>(EventType.REMOVED, key, value,
                         null, CouchbaseCache.this));
             }
         });
@@ -1162,11 +1161,11 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
     }
 
     private void checkTypes(K key, V value) {
-        Class keyType = key.getClass();
-        Class valueType = value.getClass();
+        Class<?> keyType = key.getClass();
+        Class<?> valueType = value.getClass();
 
-        Class confKeyType = configuration.getKeyType();
-        Class confValueType = configuration.getValueType();
+        Class<?> confKeyType = configuration.getKeyType();
+        Class<?> confValueType = configuration.getValueType();
 
         if (confKeyType != Object.class && !confKeyType.isAssignableFrom(keyType)) {
             throw new ClassCastException("Keys are required to be of type " + confKeyType.getName());

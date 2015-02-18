@@ -14,8 +14,6 @@
 package com.couchbase.client.jcache;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.Map;
 
 import javax.cache.configuration.CompleteConfiguration;
 import javax.cache.configuration.MutableConfiguration;
@@ -176,7 +174,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
         if (name.isEmpty()) {
             throw new IllegalArgumentException("Empty cache name not allowed");
         }
-        return new Builder(name, keyConverter);
+        return new Builder<K, V>(name, keyConverter);
     }
 
     /**
@@ -337,7 +335,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @return the built CouchbaseConfiguration
          */
         public CouchbaseConfiguration<K, V> build() {
-            CouchbaseConfiguration config;
+            CouchbaseConfiguration<K, V> config;
             if (viewAllDesignDoc == null) {
                 viewAllDesignDoc = DEFAULT_VIEWALL_DESIGNDOC;
             }

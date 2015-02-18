@@ -18,7 +18,6 @@ import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -31,7 +30,6 @@ import javax.cache.Cache;
 import com.couchbase.client.core.lang.Tuple2;
 import com.couchbase.client.java.AsyncBucket;
 import com.couchbase.client.java.Bucket;
-import com.couchbase.client.java.document.Document;
 import com.couchbase.client.java.document.SerializableDocument;
 import com.couchbase.client.jcache.CouchbaseCacheIterator.TimeAndDocHook;
 import org.junit.BeforeClass;
@@ -64,7 +62,7 @@ public class CouchbaseCacheIteratorTest {
         keyList = new ArrayList<String>(10);
         valueList = new ArrayList<Double>(10);
         for (int i = 0; i < 10; i++) {
-            Double value = new Double(i + 0.4d);
+            Double value = i + 0.4d;
             valueList.add(value);
             keyList.add(CONVERTER.asString(i));
         }

@@ -43,7 +43,7 @@ def getVersionName() {
             standardOutput = stdout
         }
         return stdout.toString().trim()
-    } catch (e) {
+    } catch (ignored) {
         //in case git command is not accessible...
         //put the date in there to have at least a reference point
         return "unknown" + new Date().format("yyyyMMdd");

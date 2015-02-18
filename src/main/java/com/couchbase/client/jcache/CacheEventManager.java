@@ -261,11 +261,8 @@ public class CacheEventManager<K, V> {
             if (filter != null ? !filter.equals(that.filter) : that.filter != null) {
                 return false;
             }
-            if (!listener.equals(that.listener)) {
-                return false;
-            }
 
-            return true;
+            return listener.equals(that.listener);
         }
 
         @Override
