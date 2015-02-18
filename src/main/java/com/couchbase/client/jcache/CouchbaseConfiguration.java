@@ -28,7 +28,7 @@ import com.couchbase.client.java.Bucket;
  */
 public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> implements Serializable {
 
-    public static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 2L;
 
     public static final String DEFAULT_BUCKET_NAME = "jcache";
     public static final String DEFAULT_BUCKET_PASSWORD = "jcache";
