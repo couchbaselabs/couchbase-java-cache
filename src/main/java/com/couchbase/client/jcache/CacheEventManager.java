@@ -89,7 +89,7 @@ public class CacheEventManager<K, V> {
 
     private Iterable<CacheEntryEvent<K, V>> filterEvents(ListenerEntry<K, V> listenerEntry,
             List<CacheEntryEvent<K, V>> allEvents) {
-        CacheEntryEventFilter filter = listenerEntry.getFilter();
+        CacheEntryEventFilter<? super K, ? super V> filter = listenerEntry.getFilter();
         List<CacheEntryEvent<K, V>> filteredEvents;
         if (filter == null) {
             filteredEvents = allEvents;
@@ -110,7 +110,7 @@ public class CacheEventManager<K, V> {
             return;
         }
 
-        for (ListenerEntry entry: entries) {
+        for (ListenerEntry<K, V> entry: entries) {
             if (entry.getListener() instanceof CacheEntryCreatedListener) {
                 ((CacheEntryCreatedListener) entry.getListener()).onCreated(filterEvents(entry, events));
             }

@@ -69,7 +69,7 @@ public class BasicCacheIntegrationTest {
         final String realKey = prefixKey +  "test";
 
         CouchbaseConfiguration<String, String> cbConfig = CouchbaseConfiguration
-                .builder(cacheName, KeyConverter.STRING_KEY_CONVERTER)
+                .<String, String>builder(cacheName, KeyConverter.STRING_KEY_CONVERTER)
                 .defaultBase()
                 .useDefaultSharedBucket()
                 .withPrefix(prefixKey)

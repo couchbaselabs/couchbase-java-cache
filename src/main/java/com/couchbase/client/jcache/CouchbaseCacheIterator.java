@@ -152,7 +152,7 @@ class CouchbaseCacheIterator<K, V> implements Iterator<Cache.Entry<K, V>> {
         if (hasNext()) {
             current = next.getValue();
             next = null;
-            return new CouchbaseCacheEntry(keyConverter.fromString(current.id()), current.content());
+            return new CouchbaseCacheEntry<K, V>(keyConverter.fromString(current.id()), (V) current.content());
         }
         throw new NoSuchElementException();
     }

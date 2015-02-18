@@ -208,7 +208,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @param base the configuration to use as a base
          * @return this {@link Builder} for chaining calls
          */
-        public Builder useBase(CompleteConfiguration<K, V> base) {
+        public Builder<K, V> useBase(CompleteConfiguration<K, V> base) {
             this.base = base;
             return this;
         }
@@ -218,7 +218,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          *
          * @return this {@link Builder} for chaining calls
          */
-        public Builder defaultBase() {
+        public Builder<K, V> defaultBase() {
             this.base = null;
             return this;
         }
@@ -229,7 +229,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * prefix for the keys, call {@link #withPrefix} <b>after</b> calling this method
          * to change that.
          */
-        public Builder useDedicatedBucket(String bucketName, String bucketPassword) {
+        public Builder<K, V> useDedicatedBucket(String bucketName, String bucketPassword) {
             this.bucketName = bucketName;
             this.bucketPassword = bucketPassword;
             this.cachePrefix = "";
@@ -248,7 +248,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @see #DEFAULT_BUCKET_NAME
          * @see #DEFAULT_BUCKET_PASSWORD
          */
-        public Builder useDefaultSharedBucket() {
+        public Builder<K, V> useDefaultSharedBucket() {
             this.bucketName = DEFAULT_BUCKET_NAME;
             this.bucketPassword = DEFAULT_BUCKET_PASSWORD;
             return this;
@@ -266,7 +266,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @param password the password for the bucket
          * @return this {@link Builder} for chaining calls
          */
-        public Builder useSharedBucket(String name, String password) {
+        public Builder<K, V> useSharedBucket(String name, String password) {
             this.bucketName = name;
             this.bucketPassword = password;
             return this;
@@ -279,7 +279,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @param prefix the prefix to use for keys in the associated cache
          * @return this {@link Builder} for chaining calls
          */
-        public Builder withPrefix(String prefix) {
+        public Builder<K, V> withPrefix(String prefix) {
             this.cachePrefix = (prefix == null) ? "" : prefix;
             return this;
         }
@@ -296,7 +296,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @param viewName the name of the view
          * @return this {@link Builder} for chaining calls
          */
-        public Builder viewAll(String designDoc, String viewName) {
+        public Builder<K, V> viewAll(String designDoc, String viewName) {
             this.viewAllDesignDoc = designDoc == null ? CouchbaseConfiguration.DEFAULT_VIEWALL_DESIGNDOC : designDoc;
             this.viewAllViewName = viewName == null ? this.cacheName : viewName;
             return this;
@@ -311,7 +311,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @param designDoc the name of the design document
          * @return this {@link Builder} for chaining calls
          */
-        public Builder viewAllDesignDoc(String designDoc) {
+        public Builder<K, V> viewAllDesignDoc(String designDoc) {
             return this.viewAll(designDoc, this.viewAllViewName);
         }
 
@@ -325,7 +325,7 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
          * @param viewName the name of the view
          * @return this {@link Builder} for chaining calls
          */
-        public Builder viewAllName(String viewName) {
+        public Builder<K, V> viewAllName(String viewName) {
             return this.viewAll(this.viewAllDesignDoc, viewName);
         }
 
