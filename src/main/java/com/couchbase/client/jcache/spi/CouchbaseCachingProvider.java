@@ -198,7 +198,7 @@ public class CouchbaseCachingProvider implements CachingProvider {
             }
 
             if (managerMap.isEmpty()) {
-                managersByClassLoader.remove(managerMap);
+                managersByClassLoader.remove(managerClassLoader);
             }
         }
     }
