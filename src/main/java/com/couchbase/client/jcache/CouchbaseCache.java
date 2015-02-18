@@ -888,7 +888,16 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 getAllKeys(), visitAction, removeAction);
     }
 
-    private String[] checkAndGetViewInfo() {
+    /**
+     * Checks for existence of a view adapted for iteration on all this cache's values.
+     *
+     * @return a pair of the view's designDoc and name if it exists, throws a {@link CacheException} otherwise.
+     * @throws CacheException when a suitable view could not be found.
+     * @see CouchbaseConfiguration#getAllViewDesignDoc()
+     * @see CouchbaseConfiguration#getAllViewName()
+     * @see CouchbaseConfiguration.Builder#viewAll(String, String)
+     */
+    public String[] checkAndGetViewInfo() {
         String expectedDesignDoc = configuration.getAllViewDesignDoc();
         String expectedViewName = configuration.getAllViewName();
         Exception cause = null;
@@ -899,8 +908,8 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 cause = new NullPointerException("Design document " + expectedDesignDoc + " does not exist");
             } else {
                 for (View view : designDoc.views()) {
-                    if (view.name() == expectedViewName) {
-                        return new String[] { expectedDesignDoc, expectedViewName };
+                    if (expectedViewName.equalsIgnoreCase(view.name())) {
+                        return new String[] { designDoc.name(), view.name() };
                     }
                 }
             }
