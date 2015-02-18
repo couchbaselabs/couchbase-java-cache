@@ -190,6 +190,20 @@ public class CacheEventManager<K, V> {
     }
 
     /**
+     * Utility method to create a {@link CouchbaseCacheEntryEvent}, {@link #queueEvent(CacheEntryEvent) queue} it and
+     * {@link #dispatch() dispatch} it one call. The old value is not applicable / set to null.
+     *
+     * @param type the type of the event to create.
+     * @param key the key impacted by the event.
+     * @param value the value corresponding to the key after the event.
+     * @param source the cache in which the event happened.
+     */
+    public void queueAndDispatch(EventType type, K key, V value, CouchbaseCache source) {
+        queueEvent(new CouchbaseCacheEntryEvent<K, V>(type, key, value, source));
+        dispatch();
+    }
+
+    /**
      * Register a new listener using the given configuration.
      *
      * @param config the configuration for the listener.

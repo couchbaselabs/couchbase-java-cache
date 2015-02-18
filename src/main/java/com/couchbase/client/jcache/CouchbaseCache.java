@@ -226,7 +226,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                             bucket.insert(doc);
                             result = loaded;
                             //a successful read-through triggers a CREATED notification
-                            eventManager.queueAndDispatch(EventType.CREATED, key, loaded, null, this);
+                            eventManager.queueAndDispatch(EventType.CREATED, key, loaded, this);
                         } catch (DocumentAlreadyExistsException e) {
                             //concurrent creation of document succeeded, abandon loading
                         }
@@ -410,7 +410,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 if (oldDocument != null) {
                     eventManager.queueAndDispatch(EventType.UPDATED, key, value, (V) oldDocument.content(), this);
                 } else {
-                    eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
+                    eventManager.queueAndDispatch(EventType.CREATED, key, value, this);
                 }
                 if (configuration.isStatisticsEnabled()) {
                     statisticsMxBean.increaseCachePuts(1L);
@@ -448,7 +448,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
         }
 
         if (oldValue == null) {
-            eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
+            eventManager.queueAndDispatch(EventType.CREATED, key, value, this);
             return null;
         } else {
             V old = (V) oldValue.content();
@@ -485,7 +485,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 if (newDoc != null) {
                     try {
                         bucket.insert(newDoc);
-                        eventManager.queueAndDispatch(EventType.CREATED, key, value, null, this);
+                        eventManager.queueAndDispatch(EventType.CREATED, key, value, this);
                         if (isStatisticsEnabled()) {
                             statisticsMxBean.increaseCacheMisses(1L);
                             statisticsMxBean.increaseCachePuts(1L);
@@ -531,7 +531,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 } catch (DocumentDoesNotExistException e) {
                     //we consider it a success (another client competed to remove)
                 }
-                eventManager.queueAndDispatch(EventType.REMOVED, key, (V) oldDoc.content(), null, this);
+                eventManager.queueAndDispatch(EventType.REMOVED, key, (V) oldDoc.content(), this);
                 if (isStatisticsEnabled()) {
                     statisticsMxBean.increaseCacheRemovals(1L);
                     statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
@@ -559,11 +559,11 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
             } else {
                 try {
                     bucket.remove(currentDoc);
-                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
+                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, this);
                     result = true;
                 } catch (DocumentDoesNotExistException e) {
                     //another client competed to remove, still considered a success
-                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
+                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, this);
                     result = true;
                 } catch (CASMismatchException e) {
                     //the value changed, assume it doesn't correspond anymore
@@ -607,7 +607,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 try {
                     //still remove and notify with known value even if cas mismatch
                     bucket.remove(cbKey);
-                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, null, this);
+                    eventManager.queueAndDispatch(EventType.REMOVED, key, currentValue, this);
                 } catch (DocumentDoesNotExistException e) {
                     currentValue = null;
                 }
@@ -813,7 +813,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 K key = fromInternalKey(serializableDocument.id());
                 V value = (V) serializableDocument.content();
                 eventManager.queueEvent(new CouchbaseCacheEntryEvent<K, V>(EventType.REMOVED, key, value,
-                        null, CouchbaseCache.this));
+                        CouchbaseCache.this));
             }
         });
         eventManager.dispatch();
@@ -880,7 +880,7 @@ public class CouchbaseCache<K, V> implements Cache<K, V> {
                 V value = (V) timeAndDoc.value2().content();
                 long start = timeAndDoc.value1();
 
-                eventManager.queueAndDispatch(EventType.REMOVED, key, value, null, CouchbaseCache.this);
+                eventManager.queueAndDispatch(EventType.REMOVED, key, value, CouchbaseCache.this);
                 if (isStatisticsEnabled()) {
                     statisticsMxBean.increaseCacheEvictions(1L);
                     statisticsMxBean.addRemoveTimeNano(System.nanoTime() - start);
