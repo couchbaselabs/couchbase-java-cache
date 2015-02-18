@@ -184,12 +184,12 @@ public class CouchbaseConfiguration<K, V> extends MutableConfiguration<K, V> imp
 
         private CompleteConfiguration<K, V> base;
         private String bucketName;
-        private KeyConverter<K> keyConverter;
         private String bucketPassword;
         private String cachePrefix;
         private String viewAllDesignDoc;
         private String viewAllViewName;
         private final String cacheName;
+        private final KeyConverter<K> keyConverter;
 
         protected Builder(String cacheName, KeyConverter<K> keyConverter) {
             this.cacheName = cacheName;

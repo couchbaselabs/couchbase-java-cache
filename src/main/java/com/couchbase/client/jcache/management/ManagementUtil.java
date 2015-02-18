@@ -47,7 +47,7 @@ public final class ManagementUtil {
     }
 
     /** The mBean server in which to register beans. */
-    private static MBeanServer mBeanServer = MBeanServerFactory.createMBeanServer();
+    private static final MBeanServer mBeanServer = MBeanServerFactory.createMBeanServer();
 
     /**
      * Register the {@link CacheStatisticsMXBean} for the given cache.

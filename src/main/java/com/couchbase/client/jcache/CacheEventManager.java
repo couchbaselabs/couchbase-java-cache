@@ -43,8 +43,8 @@ import javax.cache.event.EventType;
  */
 public class CacheEventManager<K, V> {
 
-    private Set<ListenerEntry<K, V>> entries = new CopyOnWriteArraySet<ListenerEntry<K, V>>();
-    private Map<Class<? extends CacheEntryListener>, List<CacheEntryEvent<K, V>>> eventQueues =
+    private final Set<ListenerEntry<K, V>> entries = new CopyOnWriteArraySet<ListenerEntry<K, V>>();
+    private final Map<Class<? extends CacheEntryListener>, List<CacheEntryEvent<K, V>>> eventQueues =
             new ConcurrentHashMap<Class<? extends CacheEntryListener>, List<CacheEntryEvent<K, V>>>();
 
     /**
