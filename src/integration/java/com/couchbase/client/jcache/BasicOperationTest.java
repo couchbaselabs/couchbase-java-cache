@@ -22,14 +22,13 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import javax.cache.CacheException;
-
 import com.couchbase.client.java.cluster.ClusterManager;
 import com.couchbase.client.java.cluster.DefaultBucketSettings;
 import com.couchbase.client.java.document.SerializableDocument;
 import com.couchbase.client.jcache.spi.CouchbaseCachingProvider;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class BasicOperationTest {
@@ -66,6 +65,7 @@ public class BasicOperationTest {
         //here we create a dedicated cache for most of the tests
         CouchbaseConfiguration<String, String> cbConfig = new CouchbaseConfiguration.Builder<String, String>(
                 CACHE_NAME, KeyConverter.STRING_KEY_CONVERTER)
+                .useDedicatedBucket(CACHE_NAME, "")
                 .build();
         dedicatedCache = (CouchbaseCache<String, String>) cacheManager.createCache(CACHE_NAME, cbConfig);
         keyConverter = dedicatedCache.keyConverter();
@@ -279,13 +279,6 @@ public class BasicOperationTest {
         assertDocument("replaced", "getreplace");
     }
 
-    @Test(expected = CacheException.class) //TODO replace with true test when view created
-    public void testRemoveAll() throws Exception {
-        dedicatedCache.checkAndGetViewInfo();
-        fail();
-        dedicatedCache.removeAll();
-    }
-
     @Test
     public void testRemoveAllFromSet() throws Exception {
         dedicatedCache.bucket.insert(SerializableDocument.create(cbKey("rk1"), TEST_VALUE));
@@ -299,17 +292,21 @@ public class BasicOperationTest {
         assertNull(dedicatedCache.bucket.get("rk3"));
     }
 
-    @Test(expected = CacheException.class) //TODO replace with true test when view created
+    @Ignore //TODO replace with true test when view created
+    @Test
+    public void testRemoveAll() throws Exception {
+        dedicatedCache.removeAll();
+    }
+
+    @Ignore //TODO replace with true test when view created
+    @Test
     public void testIterator() throws Exception {
-        dedicatedCache.checkAndGetViewInfo();
-        fail();
         dedicatedCache.iterator();
     }
 
-    @Test(expected = CacheException.class) //TODO replace with true test when view created
+    @Ignore //TODO replace with true test when view created
+    @Test
     public void testClear() throws Exception {
-        dedicatedCache.checkAndGetViewInfo();
-        fail();
         dedicatedCache.clear();
     }
 }
